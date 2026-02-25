@@ -53,6 +53,7 @@ const PRO_SWEEP_MAX_POINTS = 120;
 const FREE_SCENARIO_LIMIT = 8;
 const CUSTOM_MASK_LIBRARY_KEY = "opclab_mask_library_v2";
 const SWEEP_LIBRARY_KEY = "opclab_sweep_library_v1";
+const SIDEBAR_EXPANDED_KEY = "opclab_sidebar_expanded_v1";
 
 type SavedSweepSnapshot = {
   id: string;
@@ -137,6 +138,7 @@ export default function Page() {
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   const grid = plan === "PRO" ? 1024 : 512;
   const returnIntensity = plan === "PRO";
@@ -273,6 +275,33 @@ export default function Page() {
   useEffect(() => {
     setScenarios(loadScenarios());
   }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_EXPANDED_KEY);
+      if (raw === "1") {
+        setSidebarExpanded(true);
+        return;
+      }
+      if (raw === "0") {
+        setSidebarExpanded(false);
+        return;
+      }
+      if (window.matchMedia("(max-width: 1180px)").matches) {
+        setSidebarExpanded(false);
+      }
+    } catch {
+      // ignore local storage issues
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_EXPANDED_KEY, sidebarExpanded ? "1" : "0");
+    } catch {
+      // ignore local storage issues
+    }
+  }, [sidebarExpanded]);
 
   useEffect(() => {
     try {
@@ -884,8 +913,20 @@ export default function Page() {
   const templateOptions = (plan === "FREE" ? FREE_TEMPLATES : PRO_TEMPLATES).map((id) => ({ id, label: templateLabel(id) }));
 
   return (
-    <div className="opclab-shell">
-      <ControlPanel
+    <div className={`opclab-shell-wrap ${sidebarExpanded ? "" : "sidebar-collapsed"}`}>
+      <button
+        type="button"
+        className="shell-sidebar-toggle"
+        onClick={() => setSidebarExpanded((v) => !v)}
+        aria-label={sidebarExpanded ? "Collapse left control panel" : "Expand left control panel"}
+        title={sidebarExpanded ? "Hide controls panel" : "Show controls panel"}
+      >
+        <span className="shell-sidebar-toggle-glyph">{sidebarExpanded ? "◂" : "▸"}</span>
+        <span className="shell-sidebar-toggle-label">{sidebarExpanded ? "Hide Panel" : "Show Panel"}</span>
+      </button>
+      <div className={`opclab-shell ${sidebarExpanded ? "" : "shell-sidebar-collapsed"}`}>
+        <div className={`opclab-sidebar ${sidebarExpanded ? "" : "is-hidden"}`}>
+          <ControlPanel
         plan={plan}
         setPlan={setPlan}
         maskMode={maskMode}
@@ -977,33 +1018,39 @@ export default function Page() {
         onRefreshAccount={() => { void refreshAccountState(); }}
         onOpenBillingPortal={() => { void openBillingPortal(); }}
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
-      />
-      <Viewport
-        sim={sim}
-        req={req}
-        runHistory={runHistory}
-        onCustomShapesChange={setCustomShapes}
-        selectedCustomShapeIndex={selectedCustomShapeIndex}
-        selectedCustomShapeIndexes={selectedCustomShapeIndexes}
-        onSelectCustomShape={selectCustomShape}
-        drawRectMode={drawRectMode}
-        onSetDrawRectMode={setDrawRectMode}
-        onAddCustomRectFromDrag={addCustomRectFromDrag}
-        compareActive={compareActive}
-        compareALabel={compareA?.label ?? null}
-        compareBLabel={compareB?.label ?? null}
-        compareAContours={compareA?.response.contours_nm ?? null}
-        compareBContours={compareB?.response.contours_nm ?? null}
-        compareACd={compareA?.response.metrics.cd_nm ?? null}
-        compareBCd={compareB?.response.metrics.cd_nm ?? null}
-        sweepResult={sweepResult}
-        sweepCustomTargetIndex={sweepCustomTargetIndex}
-        sweepCompareA={sweepCompareA}
-        sweepCompareB={sweepCompareB}
-        sweepCompareALabel={compareA?.label ?? null}
-        sweepCompareBLabel={compareB?.label ?? null}
-        onUsageConsumed={() => { void refreshUsageStatus(plan); }}
-      />
+          />
+        </div>
+        <div className="opclab-workspace-scroll">
+          <div className="opclab-workspace-inner">
+            <Viewport
+              sim={sim}
+              req={req}
+              runHistory={runHistory}
+              onCustomShapesChange={setCustomShapes}
+              selectedCustomShapeIndex={selectedCustomShapeIndex}
+              selectedCustomShapeIndexes={selectedCustomShapeIndexes}
+              onSelectCustomShape={selectCustomShape}
+              drawRectMode={drawRectMode}
+              onSetDrawRectMode={setDrawRectMode}
+              onAddCustomRectFromDrag={addCustomRectFromDrag}
+              compareActive={compareActive}
+              compareALabel={compareA?.label ?? null}
+              compareBLabel={compareB?.label ?? null}
+              compareAContours={compareA?.response.contours_nm ?? null}
+              compareBContours={compareB?.response.contours_nm ?? null}
+              compareACd={compareA?.response.metrics.cd_nm ?? null}
+              compareBCd={compareB?.response.metrics.cd_nm ?? null}
+              sweepResult={sweepResult}
+              sweepCustomTargetIndex={sweepCustomTargetIndex}
+              sweepCompareA={sweepCompareA}
+              sweepCompareB={sweepCompareB}
+              sweepCompareALabel={compareA?.label ?? null}
+              sweepCompareBLabel={compareB?.label ?? null}
+              onUsageConsumed={() => { void refreshUsageStatus(plan); }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
