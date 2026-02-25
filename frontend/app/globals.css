@@ -106,51 +106,56 @@ select:focus {
 
 .shell-sidebar-toggle {
   position: fixed;
-  top: 16px;
-  left: calc(var(--opclab-shell-pad) + var(--opclab-sidebar-width) - 16px);
+  top: 50%;
+  left: calc(var(--opclab-shell-pad) + var(--opclab-sidebar-width) - 1px);
+  transform: translate(-50%, -50%);
   z-index: 130;
-  min-height: 32px;
-  padding: 4px 10px 4px 8px;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(26, 44, 70, 0.2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(238, 245, 255, 0.78));
-  box-shadow: 0 10px 22px rgba(18, 30, 48, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(10px) saturate(1.14);
-  color: rgba(18, 34, 56, 0.9);
+  border: 1px solid rgba(29, 44, 66, 0.17);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(236, 244, 255, 0.74));
+  box-shadow: 0 6px 14px rgba(16, 28, 46, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px) saturate(1.08);
+  color: rgba(18, 34, 56, 0.82);
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  font-weight: 680;
-  letter-spacing: 0.01em;
+  justify-content: center;
+  gap: 0;
+  font-size: 10px;
+  font-weight: 640;
+  opacity: 0.92;
   white-space: nowrap;
 }
 
 .shell-sidebar-toggle:hover {
-  border-color: rgba(10, 132, 255, 0.52);
-  background: linear-gradient(180deg, rgba(248, 252, 255, 0.96), rgba(225, 239, 255, 0.88));
+  border-color: rgba(10, 132, 255, 0.42);
+  background: linear-gradient(180deg, rgba(249, 252, 255, 0.94), rgba(227, 239, 255, 0.86));
+  box-shadow: 0 8px 16px rgba(15, 36, 60, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  opacity: 1;
 }
 
 .shell-sidebar-toggle-glyph {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(30, 50, 76, 0.2);
-  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(30, 50, 76, 0.16);
+  background: rgba(255, 255, 255, 0.72);
   font-size: 10px;
   line-height: 1;
 }
 
 .shell-sidebar-toggle-label {
-  font-size: 11px;
-  font-weight: 660;
+  display: none;
 }
 
 .opclab-shell-wrap.sidebar-collapsed .shell-sidebar-toggle {
-  left: calc(var(--opclab-shell-pad) + 1px);
+  left: calc(var(--opclab-shell-pad) + 2px);
+  transform: translate(0, -50%);
 }
 
 .opclab-workspace-scroll {
@@ -1598,9 +1603,6 @@ a.plan-action-link {
   .opclab-workspace-inner {
     min-width: 920px;
   }
-  .shell-sidebar-toggle-label {
-    display: none;
-  }
 }
 
 @media (max-width: 980px) {
@@ -1610,10 +1612,10 @@ a.plan-action-link {
     --opclab-sidebar-width: min(84vw, 320px);
   }
   .shell-sidebar-toggle {
-    top: 10px;
-    left: calc(var(--opclab-shell-pad) + var(--opclab-sidebar-width) - 12px);
+    top: 56%;
+    left: calc(var(--opclab-shell-pad) + var(--opclab-sidebar-width) - 2px);
+    width: 30px;
     min-height: 30px;
-    padding: 4px 7px;
   }
   .opclab-shell-wrap.sidebar-collapsed .shell-sidebar-toggle {
     left: calc(var(--opclab-shell-pad) + 1px);
@@ -1621,6 +1623,18 @@ a.plan-action-link {
   .opclab-workspace-inner {
     min-width: 860px;
   }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .sweep-chart-wrap {

@@ -1,7 +1,8 @@
 import type { Plan } from "./types";
 import { getAccessToken, getDevEmail, getDevUserId } from "./auth";
+import { getApiBase } from "./api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE = getApiBase();
 const CLIENT_ID_KEY = "opclab_client_id_v1";
 
 export type UsageOp = "runs" | "sweep_points" | "exports";

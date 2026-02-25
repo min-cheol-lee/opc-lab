@@ -1,6 +1,7 @@
 import { clientHeaders } from "./usage";
+import { getApiBase } from "./api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE = getApiBase();
 const EVENT_QUEUE_KEY = "opclab_event_queue_v1";
 const EVENT_FLUSH_DELAY_MS = 1200;
 const EVENT_FLUSH_BATCH = 120;

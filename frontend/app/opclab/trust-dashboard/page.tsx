@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { clientHeaders } from "../../../lib/usage";
+import { getApiBase } from "../../../lib/api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE = getApiBase();
 
 type BenchmarkCaseResult = {
   case_id: string;

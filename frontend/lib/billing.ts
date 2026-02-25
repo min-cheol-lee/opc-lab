@@ -1,7 +1,8 @@
 import type { Plan } from "./types";
 import { clientHeaders } from "./usage";
+import { getApiBase } from "./api-base";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE = getApiBase();
 
 export type BillingStatus = {
   user_id: string;

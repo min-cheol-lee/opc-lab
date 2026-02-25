@@ -15,6 +15,7 @@ import {
 import { SavedScenario, loadScenarios, saveScenarios } from "../../lib/scenarios";
 import { exportSweepCsv } from "../../lib/export";
 import { createCheckoutSession, createPortalSession, fetchBillingStatus, type BillingStatus } from "../../lib/billing";
+import { getApiBase } from "../../lib/api-base";
 import {
   clientHeaders,
   consumeUsage,
@@ -27,7 +28,7 @@ import {
 } from "../../lib/usage";
 import { flushProductEvents, trackProductEvent } from "../../lib/telemetry";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE = getApiBase();
 const FREE_PRESETS: Array<SimRequest["preset_id"]> = ["DUV_193_DRY", "EUV_LNA"];
 const FREE_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = ["ISO_LINE", "DENSE_LS", "CONTACT_RAW"];
 const PRO_TEMPLATES_BASE: Array<NonNullable<SimRequest["mask"]["template_id"]>> = [
@@ -174,7 +175,7 @@ export default function Page() {
       setUsageStatus(status);
       setPlan((prev) => (prev === status.plan ? prev : status.plan));
     } catch (err) {
-      setUsageError(err instanceof Error ? err.message : "Failed to load usage status.");
+      setUsageError(toUiFetchError(err, "Failed to load usage status."));
     } finally {
       setUsageLoading(false);
     }
@@ -190,7 +191,7 @@ export default function Page() {
       setPlan((prev) => (prev === me.plan ? prev : me.plan));
       void refreshUsageStatus(me.plan);
     } catch (err) {
-      setAccountError(err instanceof Error ? err.message : "Failed to load account state.");
+      setAccountError(toUiFetchError(err, "Failed to load account state."));
     } finally {
       setAccountLoading(false);
     }
@@ -922,7 +923,10 @@ export default function Page() {
         title={sidebarExpanded ? "Hide controls panel" : "Show controls panel"}
       >
         <span className="shell-sidebar-toggle-glyph">{sidebarExpanded ? "◂" : "▸"}</span>
-        <span className="shell-sidebar-toggle-label">{sidebarExpanded ? "Hide Panel" : "Show Panel"}</span>
+        <span className="shell-sidebar-toggle-label" aria-hidden="true">
+          {sidebarExpanded ? "Hide" : "Show"}
+        </span>
+        <span className="sr-only">{sidebarExpanded ? "Hide Panel" : "Show Panel"}</span>
       </button>
       <div className={`opclab-shell ${sidebarExpanded ? "" : "shell-sidebar-collapsed"}`}>
         <div className={`opclab-sidebar ${sidebarExpanded ? "" : "is-hidden"}`}>
@@ -1053,6 +1057,13 @@ export default function Page() {
       </div>
     </div>
   );
+}
+
+function toUiFetchError(err: unknown, fallback: string): string {
+  if (err instanceof TypeError && /fetch/i.test(err.message)) {
+    return `${fallback} Network/API connection issue detected. Check Vercel NEXT_PUBLIC_API_BASE and Railway CORS/allowlist settings.`;
+  }
+  return err instanceof Error ? err.message : fallback;
 }
 
 function findEntitlementMismatch(res: EntitlementsResponse): string | null {
