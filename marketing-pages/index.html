@@ -6,67 +6,158 @@
     <title>OPC Lab Simulator</title>
     <meta
       name="description"
-      content="Physics-informed educational OPC simulator. Learn faster with sweep, compare, and export workflows."
+      content="OPC Lab Simulator. Run sweep studies, compare A/B mask strategies, and inspect synchronized 2D/3D lithography behavior."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div class="bg-grain" aria-hidden="true"></div>
+
     <header class="topbar">
-      <div class="brand">OPC Lab</div>
-      <a class="btn btn-ghost" id="launchTop" href="#" target="_blank" rel="noopener noreferrer">Launch Simulator</a>
+      <a class="brand" href="#">OPC Lab</a>
+      <nav class="top-actions" aria-label="Primary">
+        <a class="btn btn-subtle" href="#opclab">What is OPC?</a>
+        <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Open Simulator</a>
+      </nav>
     </header>
 
     <main class="page">
-      <section class="hero">
-        <p class="kicker">Educational OPC Simulator</p>
-        <h1>Physics-informed lithography training that converts.</h1>
-        <p class="lede">
-          Built for students, new OPC engineers, and process researchers. Validate ideas with reproducible sweeps, A/B
-          comparisons, and exportable outputs.
+      <section class="hero" data-reveal>
+        <p class="eyebrow">Optical Proximity Correction Simulator</p>
+        <h1>Pattern decisions that print right at nanometer scale.</h1>
+        <p class="hero-copy">
+          Explore lithography behavior with Sweep Mode, A/B comparison, and synchronized 2D/3D views in one fast workflow.
         </p>
         <div class="hero-cta">
-          <a class="btn btn-primary" id="launchMain" href="#" target="_blank" rel="noopener noreferrer">Launch Simulator</a>
-          <a class="btn btn-ghost" href="#pricing">See Plans</a>
+          <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch OPC Lab</a>
+          <a class="btn btn-subtle" href="#showcase">View Features</a>
         </div>
+
+        <figure class="hero-visual" aria-label="Simulator showcase">
+          <div class="sim-shell">
+            <div class="sim-toolbar-row">
+              <span class="tool-chip">Zoom</span>
+              <span class="tool-chip">View</span>
+              <span class="tool-chip">Export</span>
+              <span class="tool-chip active">Sweep View</span>
+            </div>
+
+            <div class="sim-layout">
+              <aside class="sim-sidebar" aria-hidden="true">
+                <div class="side-block side-head"></div>
+                <div class="side-block"></div>
+                <div class="side-block"></div>
+                <div class="side-block"></div>
+              </aside>
+
+              <div class="sim-stage-wrap">
+                <div class="sim-stage">
+                  <div class="sim-legend">
+                    <span><i class="legend-dot mask"></i>Mask</span>
+                    <span><i class="legend-dot contour"></i>Contour</span>
+                    <span><i class="legend-dot aerial"></i>Aerial</span>
+                  </div>
+
+                  <svg viewBox="0 0 740 430" role="img" aria-label="OPC contour animation">
+                    <defs>
+                      <linearGradient id="bgPanel" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#1b2f4c" />
+                        <stop offset="100%" stop-color="#10223a" />
+                      </linearGradient>
+                      <linearGradient id="aerialFill" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="rgba(255,196,62,0.85)" />
+                        <stop offset="100%" stop-color="rgba(255,96,58,0.72)" />
+                      </linearGradient>
+                      <filter id="contourGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="2.8" flood-color="#78d8ff" flood-opacity="0.52" />
+                      </filter>
+                    </defs>
+                    <rect x="0" y="0" width="740" height="430" rx="22" fill="url(#bgPanel)" />
+                    <rect x="312" y="66" width="116" height="298" rx="9" fill="rgba(255,152,196,0.12)" stroke="rgba(255,182,220,0.76)" />
+                    <path d="M344,82 C324,116 324,144 344,172 C365,200 365,230 344,258 C324,286 324,314 344,350 L396,350 C416,314 416,286 396,258 C375,230 375,200 396,172 C416,144 416,116 396,82 Z"
+                      fill="url(#aerialFill)" opacity="0.86" />
+                    <path class="contour-line contour-main" d="M332,74 C303,108 303,151 332,186 C361,221 361,259 332,294 C303,329 303,359 332,372 L408,372 C437,359 437,329 408,294 C379,259 379,221 408,186 C437,151 437,108 408,74 Z" />
+                    <path class="contour-line contour-alt" d="M322,68 C288,105 288,153 322,192 C356,231 356,258 322,295 C288,332 288,366 322,380 L418,380 C452,366 452,332 418,295 C384,258 384,231 418,192 C452,153 452,105 418,68 Z" />
+                    <path class="contour-line contour-fade" d="M314,63 C275,102 275,158 314,199 C353,240 353,258 314,298 C275,338 275,370 314,388 L426,388 C465,370 465,338 426,298 C387,258 387,240 426,199 C465,158 465,102 426,63 Z" />
+                    <g class="sweep-probe">
+                      <line x1="290" y1="236" x2="450" y2="236" />
+                      <circle cx="290" cy="236" r="4.4" />
+                      <circle cx="450" cy="236" r="4.4" />
+                      <text x="370" y="224" text-anchor="middle">Sweep CD 82.1 nm</text>
+                    </g>
+                  </svg>
+
+                  <div class="sim-status">Sweep mode | dose 0.42 | 9 points | CD stable</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </figure>
       </section>
 
-      <section class="grid stats">
-        <article class="card">
-          <h3>Sweep + Compare</h3>
-          <p>Fast what-if iteration with dose/geometry sweeps and scenario-level A/B review.</p>
+      <section class="opclab-band" id="opclab" data-reveal>
+        <p class="eyebrow invert">What is OPC?</p>
+        <h2>OPC (Optical Proximity Correction) pre-distorts mask geometry so the wafer print lands on target.</h2>
+        <p>
+          In advanced semiconductor manufacturing, OPC directly impacts CD control, yield, and process window margin.
+        </p>
+      </section>
+
+      <section class="showcase" id="showcase">
+        <article class="feature-card" data-reveal>
+          <div class="feature-copy">
+            <h3>Sweep Studio</h3>
+            <p>Scan dose and geometry windows quickly, then inspect contour movement in one timeline.</p>
+          </div>
+          <div class="feature-media sweep-media" aria-hidden="true">
+            <svg viewBox="0 0 420 240">
+              <rect x="20" y="18" width="380" height="204" rx="16" />
+              <path class="axis" d="M58 196 L360 196 M58 40 L58 196" />
+              <path class="trend main" d="M66 174 C116 160,144 148,182 126 C220 103,250 98,288 88 C322 80,340 70,356 58" />
+              <path class="trend ghost" d="M66 180 C110 170,150 160,184 140 C216 122,246 114,290 104 C326 96,344 88,356 76" />
+              <circle class="probe" cx="252" cy="97" r="7" />
+            </svg>
+          </div>
         </article>
-        <article class="card">
-          <h3>Trust Artifacts</h3>
-          <p>Benchmark trend, model change logs, and explicit assumptions for technical credibility.</p>
+
+        <article class="feature-card" data-reveal>
+          <div class="feature-copy">
+            <h3>A/B Comparison</h3>
+            <p>Place two mask strategies on one frame and choose the better process target with measurable delta.</p>
+          </div>
+          <div class="feature-media compare-media" aria-hidden="true">
+            <svg viewBox="0 0 420 240">
+              <rect x="22" y="20" width="376" height="200" rx="16" />
+              <path class="mask-frame" d="M176 36 H246 V204 H176 Z" />
+              <path class="ab-line a" d="M166 46 C146 76,146 112,166 142 C186 172,186 186,166 212 H256 C276 186,276 172,256 142 C236 112,236 76,256 46 Z" />
+              <path class="ab-line b" d="M156 38 C132 74,132 116,156 150 C180 184,180 192,156 218 H266 C290 192,290 184,266 150 C242 116,242 74,266 38 Z" />
+            </svg>
+          </div>
         </article>
-        <article class="card">
-          <h3>Monetization Ready</h3>
-          <p>Free/Pro entitlements, usage metering, audit trail, and upgrade funnel instrumentation.</p>
+
+        <article class="feature-card" data-reveal>
+          <div class="feature-copy">
+            <h3>2D + 3D Panels</h3>
+            <p>Read contour behavior in 2D and depth context in 3D, synchronized from one input state.</p>
+          </div>
+          <div class="feature-media panel-media" aria-hidden="true">
+            <div class="panel-stack">
+              <div class="panel-tile two-d"></div>
+              <div class="panel-tile three-d"></div>
+            </div>
+          </div>
         </article>
       </section>
 
-      <section id="pricing" class="pricing">
-        <article class="price-card">
-          <h3>Free</h3>
-          <ul>
-            <li>Daily usage limits</li>
-            <li>Basic run + selected sweeps</li>
-            <li>Starter scenario slots</li>
-          </ul>
-        </article>
-        <article class="price-card featured">
-          <h3>Pro</h3>
-          <ul>
-            <li>Higher limits + faster workflow</li>
-            <li>Batch sweep + compare mode</li>
-            <li>High-res export and reporting</li>
-          </ul>
-        </article>
+      <section class="cta-band" data-reveal>
+        <h2>Build process intuition before expensive fab iterations.</h2>
+        <p>Open the simulator and run your first sweep in under a minute.</p>
+        <a class="btn btn-primary btn-large" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch Simulator</a>
       </section>
     </main>
 
     <footer class="foot">
-      <small>OPC Lab Simulator · Educational approximation, not sign-off.</small>
+      <small>Educational simulator. Not a sign-off tool.</small>
     </footer>
 
     <script src="./site-config.js"></script>
