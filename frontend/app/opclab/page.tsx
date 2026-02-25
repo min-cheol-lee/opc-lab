@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ControlPanel } from "../../components/ControlPanel";
 import { Viewport } from "../../components/Viewport";
 import {
@@ -55,6 +55,9 @@ const FREE_SCENARIO_LIMIT = 8;
 const CUSTOM_MASK_LIBRARY_KEY = "opclab_mask_library_v2";
 const SWEEP_LIBRARY_KEY = "opclab_sweep_library_v1";
 const SIDEBAR_EXPANDED_KEY = "opclab_sidebar_expanded_v1";
+const WORKSPACE_SCALE_KEY = "opclab_workspace_scale_v1";
+const WORKSPACE_SCALE_MIN = 0.78;
+const WORKSPACE_SCALE_MAX = 1.85;
 
 type SavedSweepSnapshot = {
   id: string;
@@ -140,6 +143,8 @@ export default function Page() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [workspaceScale, setWorkspaceScale] = useState(1);
+  const workspacePinchRef = useRef<{ startDistance: number; startScale: number } | null>(null);
 
   const grid = plan === "PRO" ? 1024 : 512;
   const returnIntensity = plan === "PRO";
@@ -303,6 +308,27 @@ export default function Page() {
       // ignore local storage issues
     }
   }, [sidebarExpanded]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORKSPACE_SCALE_KEY);
+      if (!raw) return;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return;
+      const clamped = Math.max(WORKSPACE_SCALE_MIN, Math.min(WORKSPACE_SCALE_MAX, parsed));
+      setWorkspaceScale(clamped);
+    } catch {
+      // ignore local storage issues
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WORKSPACE_SCALE_KEY, String(workspaceScale));
+    } catch {
+      // ignore local storage issues
+    }
+  }, [workspaceScale]);
 
   useEffect(() => {
     try {
@@ -913,6 +939,36 @@ export default function Page() {
   const compareActive = compareEnabled && !!compareA && !!compareB && compareA.id !== compareB.id;
   const templateOptions = (plan === "FREE" ? FREE_TEMPLATES : PRO_TEMPLATES).map((id) => ({ id, label: templateLabel(id) }));
 
+  const touchDistance = (a: { clientX: number; clientY: number }, b: { clientX: number; clientY: number }) => {
+    const dx = a.clientX - b.clientX;
+    const dy = a.clientY - b.clientY;
+    return Math.hypot(dx, dy);
+  };
+
+  const onWorkspaceTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 2) return;
+    const d = touchDistance(e.touches[0], e.touches[1]);
+    if (d <= 8) return;
+    workspacePinchRef.current = { startDistance: d, startScale: workspaceScale };
+  };
+
+  const onWorkspaceTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    const pinch = workspacePinchRef.current;
+    if (!pinch || e.touches.length !== 2) return;
+    const d = touchDistance(e.touches[0], e.touches[1]);
+    if (d <= 8) return;
+    e.preventDefault();
+    const scaled = pinch.startScale * (d / pinch.startDistance);
+    const clamped = Math.max(WORKSPACE_SCALE_MIN, Math.min(WORKSPACE_SCALE_MAX, scaled));
+    setWorkspaceScale((prev) => (Math.abs(prev - clamped) < 0.002 ? prev : Number(clamped.toFixed(3))));
+  };
+
+  const onWorkspaceTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      workspacePinchRef.current = null;
+    }
+  };
+
   return (
     <div className={`opclab-shell-wrap ${sidebarExpanded ? "" : "sidebar-collapsed"}`}>
       <button
@@ -1024,8 +1080,14 @@ export default function Page() {
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}
           />
         </div>
-        <div className="opclab-workspace-scroll">
-          <div className="opclab-workspace-inner">
+        <div
+          className="opclab-workspace-scroll"
+          onTouchStart={onWorkspaceTouchStart}
+          onTouchMove={onWorkspaceTouchMove}
+          onTouchEnd={onWorkspaceTouchEnd}
+          onTouchCancel={onWorkspaceTouchEnd}
+        >
+          <div className="opclab-workspace-inner" style={{ zoom: workspaceScale }}>
             <Viewport
               sim={sim}
               req={req}

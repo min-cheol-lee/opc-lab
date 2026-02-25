@@ -164,6 +164,8 @@ select:focus {
   overflow-y: hidden;
   padding-bottom: 2px;
   scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
 }
 
 .opclab-workspace-scroll::-webkit-scrollbar {
@@ -186,6 +188,8 @@ select:focus {
   width: 100%;
   min-width: 980px;
   min-height: 100%;
+  transform-origin: top left;
+  transition: zoom 120ms ease;
 }
 
 .opclab-panel {
