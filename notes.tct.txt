@@ -1,0 +1,234 @@
+do you know any existing simulation tool for public to visualize Optical proximity effect? Something like, putting an example mask shape and showing contour results of an actual printable pattern on a wafer regarding photolithography process. I would like to make a tool for GUI interface for an user to easily test a mask shape from a simple rectangular/square to complex geometries including serif/dogear structures even with SRAF. Of course to specify the exact dimensions along x/y directions of a photomask, and mosi/glass/chrome tones, EUV/DUV with their relevant/representative wavelengths like 13-nm and 193-nm. I want to build this up with codes in my visual studio, spending 1-2 hours a day within 1-2 weeks. Eventually I want to implement this in my personal website https://mincheollee.com. It needs to look very fancy, with smooth transitions between changing mask shapes by users, and relevantly smooth transitions in the final pattern shapes as OPC simulation results. To my best knowledge, there are few cases educate public starting from the basic of OPC with showing actual examples of input-mask and output-patter regarding EUV/DUV photolithograph fundamentals. I want to make a very good baseline would be beneficial to public who wants to learn about this OPC technics, which is crucial for state-of-art semiconductor manufacturing processes with highest 2-nm nodes. I prefer to code with python, but any other language would be okay as long as it works best for proficient and fanciness of the outputs, and capability to implement into my personal website, and sharing/selling purposes to public. Please build a firm plan to make this plan realize with the highest efficiency and highest profits at the end. Please ask any necessary questions to polish this plan from your side. Please answer in Korean, while I will keep communicating in English. 
+
+
+
+
+
+
+좋아. 지금까지 개발된 OPC-LAB을 토대로 향후 개발 방향성에 대한 질문을 할게. 이 app을 만드는 이유는 다음과 같아.
+
+1. 돈을 많이 번다.
+2. opc engineer / physicist / software engineer로써의 나의 명망을 높인다.
+
+그래서 내가 생각한 개발 방향성은,
+1. semiconductor 공정에 관심이 많은 요즘에도, 정작 photolithograph 공정에서의 mask in - pattern out에 대한 전반적인 이해가 부족하다.
+2. 학생들 혹은 관련 분야 engineer들이 해당 지식에 대한 열망이 있을 것이다.
+3. 따라서 실제 업계 표준 모델을 이용해서 OPC 관련 지식에 대한 간단한 이해를 제공하고, 사용자가 실제로 pattern을 만들고 lihto output을 test해 볼 수 있는 program/app이 있다면 수요가 있을 것이다.
+4. 나아가 이러한 모형들 혹은 test 결과들을 fancy하게 보여준다면 발표 자료나 언론 보도용으로 만들기 위해, 혹은 figure/output만을 사기위한 수요가 있을 것이다.
+5. 하지만 목표가 수익 창출인만큼, 최대한 free version이나 홍보 자료를 통해 이 app을 통해 구현 가능한 것들을 맛보기로 보여주고, 구독을 통해 pro version을 사용함으로써 실질적으로 원하는 결과물을 유저가 얻도록 해야할 것이다.
+6. 하지만 타겟층을 단순 학생/엔지니어로만 우선 잡을 것인지, 아니면 일반 대중들도 포함시킬 수 있을 것인지 고민해야봐야 한다. 개인적인 생각으로는 둘 다 잡기에는 처음에 무리가 있을 것이기에, 우선 학생/엔지니어를 대상으로한 보다 전문적인 app을 먼저 출시해서 간을 본다음, 대중을 잡기 위한 별도 version을 만든다. 이 별도 버전은 최대한 fancy한 output (3d effect들을 최대한 이용해서) 처음부터 눈을 사로잡는 것을 목표로 한다.
+7. 지금은 구현되어있지 않지만, 유저가 직접 모형들을 drag-and-drop 방식대로 input mask 모형을 만들고, 이에따른 litho patter output을 확인할 수 있는 template 역시 추가해야한다. Free version에는 제한을 두어서 입력 가능 모형 개수를 3-4 정도로 limit을 잡고, pro version에는 이러한 제한을 많이 푸는 방식으로 구매를 유도한다.
+8. 현재 학생/엔지니어 타겟 목표를 한 version에서도 최대한 fancy한 UI, 그리고 output을 최대한 멋있게 제공하여 구매층을 유도하도록 한다.
+9. 홍보 계획도 잘 짜야한다. 우선은 linkedin, reddit 등에 왜 이런 app을 만들게 되었는지 OPC가 왜 중요한지, 이 app을 통해서 어떤 것들을 할 수 있는지 demo 모형들을 영상과 그림들로 최대한 잘 포장해서 보여주는 것이 목표다.
+
+
+위의 나의 생각들을 잘 review하고, 이 app의 제작 목표들을 고려해서 수정사항을 제시하고 이에 따른 향후 app 수정/개발 방향성을 계획해줘. 단순히 나의 의견에 대해 긍정적으로 다 따를려고 하지 말고, 만약 너의 의견과 다른 부분이 있을 경우 설명해 주고 왜 그런 생각을 하는지 나에게 알려주고 의견을 물어줘. 최대한 너의 의견을 반영해서 app 제작 목표를 달성하고 싶어.
+
+
+
+
+
+
+
+**핵심 평가**
+방향은 좋습니다. 특히 `교육 + 실습 + 시각화` 조합은 수요가 있습니다.  
+다만 수익/명망 목표를 빨리 달성하려면 “멋진 데모”보다 먼저 “반복 사용되는 워크플로우”를 만들어야 합니다.
+
+**내가 동의하는 점**
+1. 학생/엔지니어 타겟 우선 출시 전략은 맞습니다.  
+2. Free에서 맛보기, Pro에서 실질 생산성 제공도 맞습니다.  
+3. LinkedIn/Reddit 중심 초기 배포도 적절합니다.  
+
+**내가 다른 의견인 점**
+1. “업계 표준 모델”을 전면 슬로건으로 쓰는 건 위험합니다.  
+   실제 sign-off급과 차이가 크면 신뢰를 잃습니다.  
+   대신 `Physics-informed educational engine + calibrated benchmark cases`로 포지셔닝하는 게 안전합니다.
+2. “예쁜 그림 구매 수요”를 1차 수익원으로 보기엔 불확실합니다.  
+   더 확실한 수익은 `교육/사내 트레이닝/팀 라이선스`입니다.
+3. 대중용 flashy 버전은 지금 바로 병행하면 집중력이 떨어집니다.  
+   먼저 전문가용에서 PMF 확인 후 파생 버전이 맞습니다.
+
+**추천 제품 전략 (수익 + 명망 동시 달성)**
+1. 제품 포지셔닝:  
+   `OPC Lab = 빠른 litho intuition + reproducible what-if analysis`.
+2. 고객 세그먼트 1순위:  
+   `신입 공정/OPC 엔지니어`, `석박/랩`, `장비·EDA 관련 AE`.
+3. 결제 유도 핵심 가치:  
+   `대량 실험`, `결과 비교`, `리포트 export`, `공유/협업`, `재현성`.
+4. 명망 강화 포인트:  
+   `모델 한계와 근거를 투명하게 공개`, `벤치마크 케이스 공개`, `정확도 개선 로그 공개`.
+
+**Free / Pro 재설계 제안**
+1. Free:
+   `preset 제한`, `run/day 제한`, `저해상도`, `export watermark`, `history 3개`.
+2. Pro Individual:
+   `batch sweep`, `고해상도`, `무제한 history`, `PNG/SVG/CSV export`, `report template`.
+3. Pro Team:
+   `workspace 공유`, `scenario library`, `권한관리`, `교육용 과제 모드`.
+
+**기능 로드맵 (실행 우선순위)**
+1. Phase 1 (2~4주): “반복 사용” 기반
+   `Parameter sweep`, `A/B compare`, `Save scenario`, `Export report`.
+2. Phase 2 (4~8주): “전문성” 기반
+   `Drag-drop custom mask editor`, `shape constraints`, `multi-feature template packs`.
+3. Phase 3 (8~12주): “신뢰성” 기반
+   `Benchmark gallery`, `model card`, `versioned assumptions`, `accuracy notes`.
+4. Phase 4: “확장”
+   `public showcase mode(대중용)`, `고급 3D cinematic renderer`, `share link gallery`.
+
+**당장 앱에 반영할 수정 방향**
+1. 온보딩:
+   첫 실행 시 `3-step guided demo` 추가 (ISO line, dense L/S, OPC serif).
+2. 분석 UX:
+   `현재 run`과 `직전 run`을 자동 비교해서 CD delta, contour overlap 표시.
+3. Pro 핵심:
+   `Dose/Focus/CD sweep one-click` + 결과 매트릭스 뷰.
+4. 신뢰 UX:
+   모든 결과에 `Model mode`, `k1 guard`, `assumptions` 배지 고정 노출.
+5. 공유 UX:
+   `Export slide-ready figure` 버튼과 `report PDF` 자동 생성.
+
+**홍보 전략 (실제 전환 중심)**
+1. LinkedIn:
+   “문제→실험→인사이트” 1분 영상 시리즈 주 2회.
+2. Reddit:
+   기술 글은 `모델 한계`를 먼저 밝히고 케이스 비교를 데이터로 제시.
+3. 랜딩 페이지:
+   `Try Free in 30s` + `Pro로 되는 것 5가지`를 즉시 보여주기.
+4. 콘텐츠 축:
+   `SRAF가 왜 출력/비출력되는가`, `Dose/focus trade-off`, `DUV vs EUV intuition`.
+
+**성공 지표 (초기 8주)**
+1. Activation: 첫 실행 후 1회 simulate 완료율 70%+.
+2. Retention: 7일 재방문율 25%+.
+3. Conversion: Free→Pro 3~8%.
+4. Value: Pro 사용자의 batch run 비율 40%+.
+
+**다음 의사결정 요청**
+내 의견 반영해서 바로 개발 계획으로 내릴 3가지를 골라주세요.
+1. `Phase 1 기능`부터 구현 시작 (sweep/compare/export/save).  
+2. `가격/플랜 구조` 먼저 확정 (Free/Pro Individual/Team).  
+3. `브랜드 문구`를 “industry-standard” 대신 “physics-informed + benchmarked”로 교체.  
+
+
+
+
+
+
+
+전에 만들어준 2주 개발 플랜의 다음 단계로 넘어가기 전에 하나 질문이 있어. 현재 free/pro version에 있는 template의 종류들을 재조정하고 싶은데, pro에서 line-end와 L-corner는 없애도 좋을 것 같아. 그리고 전에 내가 말한 user가 직접 mask input을 drag-n-drop 형식으로 제작할 수 있는 template을 추가시켜줄 수 있어? free version에는 3개정도의 rectangular만 만들수 있도록 limit를 잡고, pro version에서는 더 많은 수의 polygon을 만들 수 있는 자유도를 주면 어떨까 해. free/pro version에서 네가 생각하기에 적절한 설정이 있다면 자유롭게 의견을 나에게 알려줘. app의 제작 목표인 수익의 최대화와 나의 명성을 높이는 것도 함께 신경써줘.
+
+다음의 사항들을 반영해서 수정해줘.
+1. 현재 왼쪽 control UI가 너무 지저분하고 복잡해. 전체적으로 다듬고 재구성해야해. 물론 전체적인 UI가 apple style로 세련되고 최대한 구매욕을 자극시킬만하게 수정해줘. 왼쪽 패널 각 부분들이 차지하는 개당 부피나 크기가 조금 큰 것 같은데 알아서 resize해줘. 물론 전체적인 통일성도 신경써야해.
+2. 우선 PLAN - Free/pro가 차지하는 비중이 너무 큰거 같아.
+3. DUV/EUV 선택 옵션인 preset과 dose (threshold)를 따로 빼는게 좋겠어. 이름도 preset말고 다른 제목으로 바꿔줘. 더 직관적으로. Focus/blur의 경우 왜 있는지 모르겠어. 우선 pro option에서도 이 기능을 꺼줘.
+4. mask source의 경우 template/custom으로 나누는 것까진 좋은데, Geometry와 함께 합치면 어떨까 싶어.
+5. custom의 경우, rect1,2,3... 추가 이후에 해당 rectangular를 선택해서 위치 뿐만 아니라 크기 역시 수정이 가능하도록 수정해줘. 현재는 처음에 입력한 CD값 고정 이후에 수정이 불가한 상황이야. template에서와 같이 해당 polygon/rectangular 선택 이후에 CD control 조절하면 크기가 realtime으로 변하는 식으로 만들어줘.
+6. Custom feature들의 경우 ruler와 같이 키보드 좌우상하 이용해서 움직이는 게 가능하게 해주고 (shift 이용시 더빠르게) 그리고 마우스 커서로 선택해서 움직이는 기능 역시 같이 구현해줘.
+7. polygon과 rectangular를 구분짓는 게 애매모호한거 같은데 rectangular만 지원하도록 하자. 이름도 적당히 직관적인 것으로 바꿔줘.
+8. pro의 경우 유저가 custom 작업을 어느정도 한 뒤, 저장/로드할 수 있는 기능을 추가해줘. 
+9. custom mask editor에서 rect 1,2,3,4,.... 부분이 한줄씩 차지하는 부분이 너무 큰 거 같기도한데 줄여줘. + RECT 역시 한줄 전체를 차지하는게 너무 비중이 큰 거 같아.
+10. rectangular의 경우, 처음 생성시 마우스 드래그-드롭으로 크기 위치 지정할 수 있는 기능도 추가해줘. 만든 이후에 꼭지점을 클릭 드래그에서 크기 수정, 전체 도형 클릭해서 위치 조정하는 기능도 구현해줘
+
+
+
+custom mask editor
+1. rect editor --> 이름이 이상하다. 더 직관적으로 custom한 mask를 만들 수 있다는 의미를 담아 제목을 바꾸어라. 그리고 Mask input 선택 창에서 Template과 mask editor 선택 아이콘이 너무 묻혀있는 느낌이다. 큰 카테코리이니만큼 신경써서 크기/위치 재 조정해줘라.
+2. R1/R2/R3/R4... 아이콘 배열 자체는 좋다. 해당 rect 클릭 후, 키보드로 위치 움직일 수 있도록 수정해라. CD/Height control 조절 단자처럼, x/y 조절 할 수 있는 단자 만들 수 있으면 좋겠다. 너무 UI 복잡해 지지 않도록 신경쓰면서 추가해라.
+3. X/Y 숫자 입력창에서 맨 처음 숫자가 0이 항상 나온다. 예를들어 800이면 0800 이렇게 나온다. 수정해라.
+4. 마우스로 draw rect 할때 실제 마우스 위치와 rect 생성되는 위치 사이에 차이가 있다. debug해줘라.
+5. Rect library 부분은 맨 아래로 옮겨라. 
+
+template
+1. OPC serif에서 serif 크기 조절 panel 사라졌다. 다시 추가시켜라.
+
+기타
+1. Run simulation 버튼이 너무 밑에 있어서 잘 띄지 않는다. 제일 중요한 버튼 중에 하나인 것 같은데 적절히 위치를 바꿔줘라. run simulation을 scenario/history/ A/B compare와 따로 떼어놓아야하면 그래도 된다.
+2. free dose range: 0.3-0.8 텍스트 때문에 free에서 pro 전환시에 UI가 움직인다. ui 최대한 변하지 않도록 수정해라. 그리고 dose range뿐만 아니라 step역시 free/pro 사이에 차이가 있는 것 같은데, 이 역시 명시를 하고, 텍스트가 너무 길어져서 지저분해진다 싶으면 적절히 잘 숨겨라. 아이콘으로 변경하고 마우스 커서 위에 올리면 보이는 식으로
+
+위의 사항들을 반영해서 수정해라. 전체적으로 apple style에 맞추는 것 잊지말고.
+
+
+
+
+custom mask editor
+1. R1/R2/R3... 바로 밑의 X/Y 숫자만 있는 panel은 없애줘
+2. custom mask library는 CD/height 조절 part 바로 밑으로 옮겨줘. custom mask editor section에 속하도록.
+3. Mask Source 버튼에 SF-symbol 느낌의 작은 monochrome SVG 아이콘까지 붙여서 지금보다 더 Apple 톤으로 마감해줘
+4. Draw rect / quick add 버튼들이 너무 따로 노는 느낌이야. 다시 디자인 재조정해줘.
+5. Pro: up to 48 rectangulars / Free: up to 3 rectangular 역시 policy 아이콘 디자인으로 text 숨겨줘
+6. CD (nm)를 width (nm)로, Rect height (nm)를 height (nm)으로 이름 바꾸어줘.
+7. scenarios랑 custom mask library save랑 차이가 정확히 뭐야? custom mask save는 pro 기능에 꼭 있어야 하는 기능이고, template의 경우에도 저장할 수 있도록 하면 좋을 것 같아. Free version에서는 mask save가 안돼도록 해줘.
+
+기타.
+1. plan과 다른 section들 (optics setp, exposure...) 사이에 폰트 크기가 맞지 않는 것 같은데. 통일성을 유지하고, apple style 유지하면서 디자인적으로 더 괜찮은 쪽으로 통일 시켜줘. UI 간결함은 유지하고.
+
+
+
+
+
+custom mask editor
+1. R1/Del 토글 코너 부분이 너무 샤프해서 안쪽 버튼들이랑 겹쳐보여. UI 전체적으로 더 stylish하게 수정해줘. 아래 mask library 토글도 마찬가지로 수정해줘.
+2. width/height 조절 시, center 중심으로 크기 조절하도록 수정해줘. 지금은 width/height 조절시 x/y position까지 같이 변해
+
+
+sweep
+1. 몇가지 parameter들이 직관적이지 않아. 너무 자유도를 많이 주면 복잡해질 수 있으니까, 우선 width/height/pitch/dose만 남기자. 그리고 pattern에 sweep을 적용하는 것은 straighforward해 보이는데, custom의 경우, R1/R2/R3/R4... rect 별로 따로 적용할 수 있으면 좋겠어. 해당 rect 토글을 클릭하면 그 rect에 대한 sweeping을 활성화하도록 하고 visual적으로도 직관적으로 눈에 띄게 표시해주고, 그 다음 sweeping을 누르면 실행되도록 하면 좋겠어. 
+2. 그리고 parameter 바꿀 때 start와 stop값은 현재 width/height/pitch값 기준으로 약 +/-30% 정도 범위로 자동 default 설정해줘. step size는 dimension parameter의 경우 EUV는 5nm, DUV는 10nm, dose는 0.1이나 0.2정도로.
+3. 그리고 A/B와 sweep만 따로 떼어서 UI를 구성하면 좋겠어. scenario랑 history는 맨 마지막으로. 
+4. sweep plotting text 크기 조금만 더 키워줘. 그리고 plotting도 더 apple style로 fancy하게 바꾸었으면 좋겠어. 
+5. run sweep 버튼도 지금은 너무 잘 안보인다. UI 적절히 바꿔줘.
+6. 전체적으로 apple style에 맞추어 design fancy하게 유지하는 거 잊지말고.
+
+
+
+
+
+
+1. template 및 부분 'Line-End / L-corner...' 텍스트 다 없애줘. 이거 의미 없어.
+2. custom mask free version에서 draw rect 4개 이상 그릴려고 하면, shape limit message 활성화를 시키던가해서 free version limit을 사용자로 하여금 인식시켜줘. 그리고 quick add는 의도적으로 free version에서 못하게 한거야? 그러면 이것도 shape limit에 설명해 놓고, free version에서 quick add 누르려고 하면, 혹은 cursor overlay 시키면 free version에서 지원 안한다고 알려줘.
+3. sweep 기능에서 정확히 어디 CD를 측정하는지 ruler가 알려주게 할 수 있어? 그리고 dose sweep의 경우, contour들을 겹쳐서 보여준다든지 해서 실제로 2D/3D panel에도 sweep 결과를 확인할 수 있도록 할 수 있나? width/height/pitch sweep도 마찬가지로 mask dimension sweep input을 2D/3D panel에 보여줄 수 있으면 best야. 
+4. A/B와 sweep을 묶고, scenarios와 history를 묶어 두 box로 해서 UI를 구성해줘. 지금 4개 한꺼번에 있는 것은 너무 복잡해 보여.
+5. 3D panel에서 rotation 말고도, x/y 위치 변경 가능하도록 controller 구성해줘. 지금 UI 구성과 최대한 잘 상응하도록 고쳐줘.
+6. custom mask edit에서 여러 rectangular 한꺼번에 잡고 키보드나 마우스로 이동하게 할 수 있는 기능 추가해줘.
+7. 지금 맨 위 zoom in/out ... export / ruler panel에서 ruler 옆 아이콘이 ??으로 뜨고 있어. 고쳐줘.
+8. 위의 요구사항들을 반영하여 수정할 때, apple style에 맞추어 fancy하게 꾸미는 것 잊지말고, 이 app의 목표가 돈을 많이 버는것, 그리고 개발자로써의 나의 명망을 드높이는 것이라는 것도 잊지마. 기존 style과도 상응할 수 있도록 신경써줘.
+
+
+
+1. ANALYSIS와 WORKSPACE UI BOX들을 MASK & GEOMETRY BOX와 같은 style로 맞춰줘 (box 크기, 구성, 폰트, 토글/아이콘 배치 스타일 등등)
+2. ruler 설정에서 [] 역시 shift를 누르고 하면 x10 빠르게 변하도록 수정해줘.
+3. mask source toggle에서 draw rect를 Draw Rectangular로 바꿔줘. 텍스트 삐져 나오거나 디자인 튀지 않도록 알아서 잘 조절해.
+4. custom mask editor에서 R1, R2, R3 ... 선택 후 키보드로 이동이 안돼. 수정해줘. 개별로 선택하거나 여러개 선택하는 경우 모두 안움직여. 그리고 custom rect 이동 하는 방법에 대해서도 설명 추가해줘. 디자인 튀지 않게 잘 고려해서 UI안에 잘 녹여. 개별 rect과 여러개 rect 선택해서 움직이는 경우 모두 설명해. 
+5. 3D panel의 X/Y control panel의 경우, mask layer만 움직이고 silicon layer는 안움직여. 같이 움직이도록 고쳐. 그리고 Z축 control도 추가하고, X/Y/Z도 적절하게 AZ/EL/roll과 같은 style로 적절하게 아이콘 추가해서 UI 구성해.
+
+위의 요구사항들을 반영하여 수정할 때, apple style에 맞추어 fancy하게 꾸미는 것 잊지말고, 이 app의 목표가 돈을 많이 버는것, 그리고 개발자로써의 나의 명망을 드높이는 것이라는 것도 잊지마. 기존 style과도 상응할 수 있도록 신경써줘.
+
+
+
+1. ANALYSIS와 WORKSPACE가 하나의 커다란 box로 묶여있는데, 이거 없애줘. MASK & GEOMETRY랑 같은 BOX type으로, width 같도록, 통일성 유지하면서.
+
+
+1. 주황색 계열인 sweep toggle이 지금 공간차지가 너무 많은 거 같아. 2D / 3D panel 내부로 옮기면 좋겠어. UI해치지 않는 선에서 왼쪽 아래로 배치해봐.
+2. dose sweep의 경우 overlay가 2D/3D panel에 잘 나타나서 좋아. 근데 mask width/height/pitch swap의 경우에는 mask input들이 overlay되어 잘 나타나지 않는 것 같아. 2D/3D panel에 잘 나타날 수 있도록 수정해줘.
+3. 그리고 sweep 결과를 store하거나 export할 수 있는 기능이 현재 구현되어 있어? 없다면 적절하게 잘 구현해서 추가시켜줘.
+
+
+
+1. sweep overlay control 같은 경우는 이전과 같이 따로 sweep view를 맨 상단 zoom in/out, reset, view, export line에 추가시켜서 조절할 수 있도록 하자. overlay viewing 중에 선택된 하나의 condition에 대한 detail을 나타내는 정보만 2D/3D panel 내부 왼쪽하단에 1줄 정도만 작게 차지해서 나타낼 수 있도록 수정해줘. 전체적인 design을 apple style에 맞춰 fancy하게 유지하는 것 잊지말고.
+
+1. dose sweep의 경우 stack all 했을 때 2D panel에는 contour가 solid line인데 3D panel에서는 dotted lines야. 2D panel에 맞춰서 모두 solid line으로 바꿔줘.
+2. width/pitch/height sweep 경우에 처음 default value는 일의자리는 0으로 해줘. (e.g. 432 -> 430)
+3. sweep stack view의 경우, non-dose sweep의 경우에도 지원해줘. mask는 dotted lines, contour는 solid line으로 하면 될 것 같은데. 선택된 contour는 지금과 같이 주황색으로, 선택된 조건의 mask는 너가 잘 고려해서 visual 선택해줘. 2D/3D panel 모두 동일하게 잘 나타날 수 있도록 구현해줘.
+
+
+다음단계 넘어가기 전에, 몇가지 app에서 기능/디자인 수정 몇가지 하고 넘어가도 되니?
+
+기능 수정사항
+1. sweep에서 contact serif는 serif 크기 sweep이 가능하도록 기능추가
+2. dense L/S에서만 pitch sweep 가능하도록 limit 걸기
+
+디자인 수정사항
+1. 3D panel background 사선 없애기
+2. mask layer 내부 음영 2D panel에서 처럼 더 약하게
+3. 2D panel과 3D panel 구분되도록 3D panel쪽에 background 효과 추가하기. stylish하게 알아서

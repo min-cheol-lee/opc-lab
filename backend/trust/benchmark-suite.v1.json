@@ -1,0 +1,56 @@
+{
+  "suite_version": "2026-02-25",
+  "description": "Phase 2B reproducible benchmark suite for educational OPC behavior validation.",
+  "cases": [
+    {
+      "id": "bk-iso-dose-monotonic-duv-imm",
+      "title": "ISO Line Dose Monotonicity (DUV Immersion)",
+      "intent": "CD should decrease monotonically as dose threshold increases."
+    },
+    {
+      "id": "bk-iso-dose-extinction-duv-dry",
+      "title": "ISO Line Extinction at High Dose (DUV Dry)",
+      "intent": "High threshold should produce no-print behavior at fixed geometry."
+    },
+    {
+      "id": "bk-contact-width-monotonic-duv-dry",
+      "title": "Contact Width Monotonicity (DUV Dry)",
+      "intent": "Increasing contact width should not reduce printed CD."
+    },
+    {
+      "id": "bk-contact-serif-monotonic-duv-dry",
+      "title": "Contact Serif Response (DUV Dry)",
+      "intent": "Increasing serif size should increase effective printed CD."
+    },
+    {
+      "id": "bk-staircase-dose-monotonic-duv-dry",
+      "title": "Staircase Dose Monotonicity (DUV Dry)",
+      "intent": "Staircase CD should decrease monotonically as dose increases."
+    },
+    {
+      "id": "bk-guard-nonprint-small-iso-duv-dry",
+      "title": "Guardrail Non-Print for Small ISO (DUV Dry)",
+      "intent": "Sub-guard mask dimensions should be treated as non-print."
+    },
+    {
+      "id": "bk-euv-contact-dose-stability",
+      "title": "EUV Contact Dose Stability",
+      "intent": "EUV contact should remain printable over moderate dose sweep."
+    },
+    {
+      "id": "bk-batch-contract-count",
+      "title": "Batch API Point Count Contract",
+      "intent": "Batch count and point array length should match expected sweep size."
+    },
+    {
+      "id": "bk-batch-contour-decimation",
+      "title": "Batch Contour Decimation Contract",
+      "intent": "Contour payload should obey configured max point cap."
+    },
+    {
+      "id": "bk-dense-ls-euv-presence",
+      "title": "Dense L/S EUV Presence Check",
+      "intent": "Representative dense pattern should print in expected CD range."
+    }
+  ]
+}

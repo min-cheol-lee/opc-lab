@@ -1,0 +1,1149 @@
+import os
+import math
+import re
+import json
+from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from .models import (
+    BatchPoint,
+    BatchSimRequest,
+    BatchSimResponse,
+    Polyline,
+    PresetResponse,
+    SimRequest,
+    SimResponse,
+    EntitlementsResponse,
+    PlanEntitlements,
+    PolicyAuditRecord,
+    PolicyAuditResponse,
+    EventIngestRequest,
+    EventIngestResponse,
+    EventSummaryResponse,
+    EventDailySummary,
+    ProductEventName,
+    PolicyDecision,
+    BenchmarkRunSummary,
+    BenchmarkTrendPoint,
+    BenchmarkTrendResponse,
+    CurrentEntitlementResponse,
+    AdminEntitlementSetRequest,
+    AdminEntitlementSetResponse,
+    AdminInviteSetRequest,
+    AdminInviteListResponse,
+    InviteAllowlistItem,
+    BillingCheckoutRequest,
+    BillingCheckoutResponse,
+    BillingPortalRequest,
+    BillingPortalResponse,
+    BillingStatusResponse,
+    BillingWebhookMockRequest,
+    UsageConsumeRequest,
+    UsageConsumeResponse,
+    UsageStatus,
+    UsageOp,
+    Plan,
+)
+from .auth import resolve_auth_identity
+from .store import (
+    consume_usage_quota as db_consume_usage_quota,
+    ensure_db,
+    get_user_entitlement,
+    get_usage_bucket as db_get_usage_bucket,
+    grant_pro_days,
+    ingest_product_events,
+    insert_policy_audit,
+    is_invite_allowed,
+    get_billing_customer_by_user,
+    get_billing_subscription_by_user,
+    get_invite_allowlist,
+    list_invite_allowlist,
+    list_policy_audit,
+    list_product_events,
+    mark_invite_used,
+    sanitize_user_id,
+    set_invite_allowlist,
+    upsert_billing_customer,
+    upsert_billing_subscription,
+    set_user_entitlement,
+)
+from .sim.presets import PRESETS
+from .sim.pipeline import run_simulation
+
+app = FastAPI(title="OPC Lab API", version="0.1.0")
+
+# Product toggle: keep disabled for now, easy to re-enable later.
+ENABLE_ADVANCED_CORNER_TEMPLATES = False
+
+DISABLED_TEMPLATES = {
+    "LINE_END_RAW",
+    "LINE_END_OPC_HAMMER",
+    "L_CORNER_RAW",
+    "L_CORNER_OPC_SERIF",
+    "L_CORNER",
+}
+
+FREE_CUSTOM_MAX_RECTS = 3
+PRO_CUSTOM_MAX_SHAPES = 48
+FREE_SWEEP_MAX_POINTS = 24
+PRO_SWEEP_MAX_POINTS = 120
+FREE_RUNS_PER_DAY = 80
+FREE_SWEEP_POINTS_PER_DAY = 600
+FREE_EXPORTS_PER_DAY = 30
+PRO_RUNS_PER_DAY = 2000
+PRO_SWEEP_POINTS_PER_DAY = 12000
+PRO_EXPORTS_PER_DAY = 600
+FREE_SCENARIO_LIMIT = 8
+ENTITLEMENT_VERSION = "2026-02-24"
+POLICY_AUDIT_MAX_ROWS = 2000
+PRODUCT_EVENT_MAX_ROWS = 6000
+TRUST_BENCHMARK_ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "trust" / "artifacts"
+TRUST_BENCHMARK_LATEST_FILE = TRUST_BENCHMARK_ARTIFACT_DIR / "benchmark-latest.json"
+TRUST_BENCHMARK_HISTORY_FILE = TRUST_BENCHMARK_ARTIFACT_DIR / "benchmark-history.json"
+_PRODUCT_EVENT_NAMES: tuple[ProductEventName, ...] = (
+    "run_sim_clicked",
+    "run_sim_succeeded",
+    "run_sim_failed",
+    "sweep_run_clicked",
+    "sweep_run_succeeded",
+    "sweep_run_failed",
+    "export_attempted",
+    "export_completed",
+    "export_blocked_quota",
+    "usage_quota_exhausted",
+    "upgrade_prompt_viewed",
+    "upgrade_prompt_clicked",
+)
+
+if os.getenv("ENV", "development").lower() == "production":
+    allow_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOW_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+else:
+    allow_origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("startup")
+def startup_init_store():
+    ensure_db()
+
+@app.middleware("http")
+async def auth_identity_middleware(request: Request, call_next):
+    identity = resolve_auth_identity(request)
+    enforce_allowlist = os.getenv("AUTH_ENFORCE_ALLOWLIST", "0").strip() == "1"
+    if enforce_allowlist:
+        email = (identity.email or "").strip().lower()
+        if not email:
+            raise HTTPException(status_code=403, detail="Invite-only mode requires email identity.")
+        if not is_invite_allowed(email):
+            raise HTTPException(status_code=403, detail="This account is not allowlisted for staging.")
+        invite = get_invite_allowlist(email)
+        if invite is not None:
+            existing = get_user_entitlement(identity.user_id)
+            if existing is None and invite["plan_default"] == "PRO":
+                set_user_entitlement(
+                    user_id=identity.user_id,
+                    plan="PRO",
+                    source="invite_default",
+                    pro_expires_at_utc=invite["expires_at_utc"],
+                )
+            mark_invite_used(email)
+    request.state.opclab_user_id = identity.user_id
+    request.state.opclab_auth_source = identity.source
+    request.state.opclab_authenticated = identity.authenticated
+    request.state.opclab_email = identity.email
+    response = await call_next(request)
+    response.headers.setdefault("X-OPCLAB-USER-ID", identity.user_id)
+    response.headers.setdefault("X-OPCLAB-AUTH-SOURCE", identity.source)
+    return response
+
+@app.middleware("http")
+async def entitlement_middleware(request: Request, call_next):
+    client_id = _resolve_client_id(request)
+    response = await call_next(request)
+    response.headers.setdefault("X-OPCLAB-ENTITLEMENT-VERSION", ENTITLEMENT_VERSION)
+    response.headers.setdefault("X-OPCLAB-CLIENT-ID", client_id)
+    return response
+
+@app.get("/")
+def root():
+    return {
+        "message": "OPC Lab API is running. Visit /docs for Swagger UI. Health: /health, Presets: /presets"
+    }
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+@app.get("/presets", response_model=PresetResponse)
+def get_presets():
+    return PresetResponse(presets=list(PRESETS.values()))
+
+def _validate_template_access(req: SimRequest) -> None:
+    if (
+        req.mask.mode == "TEMPLATE"
+        and not ENABLE_ADVANCED_CORNER_TEMPLATES
+        and req.mask.template_id in DISABLED_TEMPLATES
+    ):
+        raise HTTPException(status_code=403, detail="This template is temporarily disabled.")
+
+def _validate_custom_mode(req: SimRequest) -> None:
+    if req.mask.mode == "CUSTOM":
+        shapes = req.mask.shapes or []
+        if any(getattr(s, "type", "rect") != "rect" for s in shapes):
+            raise HTTPException(
+                status_code=403,
+                detail="Custom mode currently supports rectangle-only shapes.",
+            )
+        if req.plan == "FREE":
+            if len(shapes) > FREE_CUSTOM_MAX_RECTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"FREE custom mode allows up to {FREE_CUSTOM_MAX_RECTS} rectangles.",
+                )
+        else:
+            if len(shapes) > PRO_CUSTOM_MAX_SHAPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"PRO custom mode allows up to {PRO_CUSTOM_MAX_SHAPES} shapes.",
+                )
+
+def _enforce_plan(req: SimRequest) -> None:
+    # Disable SRAF for all plans (temporary)
+    req.mask.params_nm["sraf_on"] = 0.0
+
+    # Enforce FREE constraints server-side
+    if req.plan == "FREE":
+        req.grid = 512
+        req.return_intensity = False
+        # FREE: EUV is low-NA only
+        if req.preset_id == "EUV_HNA":
+            req.preset_id = "EUV_LNA"
+
+def _apply_request_policy(req: SimRequest) -> SimRequest:
+    out = req.model_copy(deep=True)
+    _validate_template_access(out)
+    _validate_custom_mode(out)
+    _enforce_plan(out)
+    return out
+
+def _day_utc() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
+
+def _limits_for_plan(plan: Plan) -> dict[UsageOp, int]:
+    if plan == "FREE":
+        return {
+            "runs": FREE_RUNS_PER_DAY,
+            "sweep_points": FREE_SWEEP_POINTS_PER_DAY,
+            "exports": FREE_EXPORTS_PER_DAY,
+        }
+    return {
+        "runs": PRO_RUNS_PER_DAY,
+        "sweep_points": PRO_SWEEP_POINTS_PER_DAY,
+        "exports": PRO_EXPORTS_PER_DAY,
+    }
+
+def _sanitize_client_id(raw: str | None) -> str:
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^a-zA-Z0-9_.:-]", "", raw.strip())
+    return cleaned[:72]
+
+def _resolve_client_id(request: Request) -> str:
+    cached = getattr(request.state, "opclab_client_id", None)
+    if isinstance(cached, str) and cached:
+        return cached
+    header = _sanitize_client_id(request.headers.get("x-opclab-client-id"))
+    if header:
+        request.state.opclab_client_id = header
+        return header
+    host = request.client.host if request.client else "anon"
+    fallback = f"ip:{host}"
+    request.state.opclab_client_id = fallback
+    return fallback
+
+def _resolve_user_id(request: Request) -> str:
+    cached = getattr(request.state, "opclab_user_id", None)
+    if isinstance(cached, str) and cached:
+        return cached
+    # Function-level calls (tests/smoke) can bypass middleware.
+    identity = resolve_auth_identity(request)
+    request.state.opclab_user_id = identity.user_id
+    request.state.opclab_auth_source = identity.source
+    request.state.opclab_authenticated = identity.authenticated
+    request.state.opclab_email = identity.email
+    return identity.user_id
+
+def _resolve_actor_id(request: Request) -> str:
+    uid = _resolve_user_id(request)
+    if uid:
+        return uid
+    return _resolve_client_id(request)
+
+def _effective_plan_for_user(user_id: str) -> Plan:
+    sanitized = sanitize_user_id(user_id)
+    if not sanitized:
+        return "FREE"
+    rec = get_user_entitlement(sanitized)
+    if rec is None:
+        return "FREE"
+    return rec["plan"]
+
+def _effective_plan_for_request(request: Request) -> Plan:
+    return _effective_plan_for_user(_resolve_user_id(request))
+
+def _build_usage_status(day: str, plan: Plan, bucket: dict[str, int]) -> UsageStatus:
+    limits = _limits_for_plan(plan)
+    usage = {
+        "runs": int(bucket.get("runs", 0)),
+        "sweep_points": int(bucket.get("sweep_points", 0)),
+        "exports": int(bucket.get("exports", 0)),
+    }
+    remaining = {
+        "runs": max(0, limits["runs"] - usage["runs"]),
+        "sweep_points": max(0, limits["sweep_points"] - usage["sweep_points"]),
+        "exports": max(0, limits["exports"] - usage["exports"]),
+    }
+    return UsageStatus(day_utc=day, plan=plan, limits=limits, usage=usage, remaining=remaining)
+
+def _now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+def _meta_strings(meta: dict[str, object] | None) -> dict[str, str]:
+    if not meta:
+        return {}
+    out: dict[str, str] = {}
+    for key, value in meta.items():
+        out[str(key)] = str(value)
+    return out
+
+def _record_policy_audit(
+    endpoint: str,
+    method: str,
+    client_id: str,
+    decision: PolicyDecision,
+    plan: Plan | None = None,
+    reason: str | None = None,
+    meta: dict[str, object] | None = None,
+) -> None:
+    insert_policy_audit(
+        {
+            "ts_utc": _now_utc_iso(),
+            "endpoint": endpoint,
+            "method": method,
+            "client_id": client_id,
+            "plan": plan,
+            "decision": decision,
+            "reason": reason,
+            "meta": _meta_strings(meta),
+        },
+        POLICY_AUDIT_MAX_ROWS,
+    )
+
+def _policy_adjustments(before: SimRequest, after: SimRequest) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if before.grid != after.grid:
+        out["grid"] = f"{before.grid}->{after.grid}"
+    if before.return_intensity != after.return_intensity:
+        out["return_intensity"] = f"{before.return_intensity}->{after.return_intensity}"
+    if before.preset_id != after.preset_id:
+        out["preset_id"] = f"{before.preset_id}->{after.preset_id}"
+    before_sraf = before.mask.params_nm.get("sraf_on")
+    after_sraf = after.mask.params_nm.get("sraf_on")
+    if before_sraf != after_sraf:
+        out["sraf_on"] = f"{before_sraf}->{after_sraf}"
+    return out
+
+def _safe_rate(numerator: int, denominator: int) -> float | None:
+    if denominator <= 0:
+        return None
+    return round(numerator / denominator, 4)
+
+def _event_day_from_ts(raw_ts: str | None) -> str:
+    if not raw_ts:
+        return _day_utc()
+    normalized = raw_ts.strip()
+    if not normalized:
+        return _day_utc()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return _day_utc()
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).date().isoformat()
+
+def _zero_event_counts() -> dict[ProductEventName, int]:
+    return {name: 0 for name in _PRODUCT_EVENT_NAMES}
+
+def _read_json_dict(path: Path) -> dict[str, object] | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+def _load_trust_latest() -> BenchmarkRunSummary | None:
+    raw = _read_json_dict(TRUST_BENCHMARK_LATEST_FILE)
+    if raw is None:
+        return None
+    try:
+        return BenchmarkRunSummary(**raw)
+    except Exception:
+        return None
+
+def _load_trust_history(limit: int) -> tuple[list[BenchmarkTrendPoint], int]:
+    raw = _read_json_dict(TRUST_BENCHMARK_HISTORY_FILE)
+    rows = raw.get("runs") if raw else None
+    if not isinstance(rows, list):
+        return [], 0
+    points: list[BenchmarkTrendPoint] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            points.append(BenchmarkTrendPoint(**row))
+        except Exception:
+            continue
+    total = len(points)
+    if limit > 0:
+        points = points[-limit:]
+    return points, total
+
+def _require_admin_token(request: Request) -> None:
+    expected = os.getenv("OPCLAB_ADMIN_TOKEN", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="Admin token is not configured.")
+    given = (request.headers.get("x-opclab-admin-token") or "").strip()
+    if given != expected:
+        raise HTTPException(status_code=403, detail="Admin token is invalid.")
+
+
+def _billing_mode() -> str:
+    return (os.getenv("BILLING_MODE", "stub") or "stub").strip().lower()
+
+
+def _iso_after_days(days: int) -> str:
+    safe_days = max(1, min(days, 3650))
+    return (datetime.now(timezone.utc) + timedelta(days=safe_days)).isoformat()
+
+
+def _mock_checkout_session_id(user_id: str) -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    suffix = sanitize_user_id(user_id).replace(":", "_").replace(".", "_")[-24:]
+    return f"cs_mock_{ts}_{suffix or 'anon'}"
+
+
+def _mock_customer_id(user_id: str) -> str:
+    suffix = sanitize_user_id(user_id).replace(":", "_").replace(".", "_")[-24:]
+    return f"cus_mock_{suffix or 'anon'}"
+
+
+def _mock_subscription_id(user_id: str) -> str:
+    suffix = sanitize_user_id(user_id).replace(":", "_").replace(".", "_")[-24:]
+    return f"sub_mock_{suffix or 'anon'}"
+
+
+def _resolve_billing_status_for_user(user_id: str) -> BillingStatusResponse:
+    sub = get_billing_subscription_by_user(user_id)
+    customer = get_billing_customer_by_user(user_id)
+    plan = _effective_plan_for_user(user_id)
+    return BillingStatusResponse(
+        user_id=user_id,
+        plan=plan,
+        stripe_customer_id=(sub["stripe_customer_id"] if sub else None) or (customer["stripe_customer_id"] if customer else None),
+        stripe_subscription_id=sub["stripe_subscription_id"] if sub else None,
+        subscription_status=sub["status"] if sub else None,
+        current_period_end_utc=sub["current_period_end_utc"] if sub else None,
+        source=_billing_mode(),
+    )
+
+
+def _append_query_params(base_url: str, params: dict[str, str]) -> str:
+    parsed = urlparse(base_url)
+    current = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    current.update(params)
+    return urlunparse(parsed._replace(query=urlencode(current)))
+
+
+def _validate_return_url(raw: str, field_name: str) -> str:
+    value = raw.strip()
+    parsed = urlparse(value)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be an absolute http(s) URL.")
+    return value
+
+def _plan_entitlements(plan: Plan) -> PlanEntitlements:
+    return PlanEntitlements(
+        plan=plan,
+        limits=_limits_for_plan(plan),
+        max_custom_rects=FREE_CUSTOM_MAX_RECTS if plan == "FREE" else PRO_CUSTOM_MAX_SHAPES,
+        max_sweep_points_per_run=FREE_SWEEP_MAX_POINTS if plan == "FREE" else PRO_SWEEP_MAX_POINTS,
+        scenario_limit=FREE_SCENARIO_LIMIT if plan == "FREE" else None,
+        quick_add_enabled=plan == "PRO",
+        batch_sweep_enabled=plan == "PRO",
+        high_res_export_enabled=plan == "PRO",
+        updated_at_utc=_now_utc_iso(),
+    )
+
+def _current_entitlement_for_user(user_id: str) -> CurrentEntitlementResponse:
+    plan = _effective_plan_for_user(user_id)
+    rec = get_user_entitlement(sanitize_user_id(user_id))
+    source = rec["source"] if rec is not None else "default_free"
+    pro_expires = rec["pro_expires_at_utc"] if rec is not None else None
+    base = _plan_entitlements(plan)
+    return CurrentEntitlementResponse(
+        user_id=user_id,
+        plan=plan,
+        source=source,
+        pro_expires_at_utc=pro_expires,
+        limits=base.limits,
+        max_custom_rects=base.max_custom_rects,
+        max_sweep_points_per_run=base.max_sweep_points_per_run,
+        scenario_limit=base.scenario_limit,
+        quick_add_enabled=base.quick_add_enabled,
+        batch_sweep_enabled=base.batch_sweep_enabled,
+        high_res_export_enabled=base.high_res_export_enabled,
+        updated_at_utc=base.updated_at_utc,
+    )
+
+def _consume_usage_quota(
+    plan: Plan,
+    client_id: str,
+    op: UsageOp,
+    amount: int = 1,
+    clamp: bool = False,
+) -> tuple[bool, int, UsageStatus, str | None]:
+    if amount <= 0:
+        raise ValueError("amount must be positive")
+    day = _day_utc()
+    limits = _limits_for_plan(plan)
+    limit = limits[op]
+    allowed, granted, bucket = db_consume_usage_quota(
+        user_id=client_id,
+        day_utc=day,
+        op=op,
+        amount=amount,
+        limit=limit,
+        clamp=clamp,
+    )
+    used = int(bucket.get(op, 0))
+    reason = None
+    if not allowed:
+        reason = f"Daily {op} quota exceeded ({used}/{limit})."
+    status = _build_usage_status(day, plan, bucket)
+    return allowed, granted, status, reason
+
+def _build_sweep_values(start: float, stop: float, step: float) -> list[float]:
+    if step <= 0:
+        raise HTTPException(status_code=400, detail="step must be > 0")
+    direction = 1 if stop >= start else -1
+    signed_step = abs(step) * direction
+    values = []
+    v = start
+    guard = 0
+    while (v <= stop + 1e-12) if direction > 0 else (v >= stop - 1e-12):
+        values.append(float(v))
+        v += signed_step
+        guard += 1
+        if guard > 20000:
+            break
+    if not values:
+        values = [float(start)]
+    return values
+
+def _set_sweep_param(req: SimRequest, param: str, value: float) -> None:
+    if param == "dose":
+        req.dose = float(value)
+        return
+    if param == "focus":
+        req.focus = float(value)
+        return
+    prefix = "mask.params_nm."
+    if param.startswith(prefix):
+        key = param[len(prefix) :]
+        req.mask.params_nm[key] = float(value)
+        return
+    raise HTTPException(status_code=400, detail=f"Unsupported sweep param: {param}")
+
+def _decimate_polyline(poly: Polyline, max_points: int) -> Polyline:
+    pts = poly.points_nm
+    n = len(pts)
+    if n <= max_points:
+        return poly
+    stride = max(1, math.ceil(n / max_points))
+    sampled = [pts[i] for i in range(0, n, stride)]
+    if sampled and sampled[-1] != pts[-1]:
+        sampled.append(pts[-1])
+    return Polyline(points_nm=sampled[:max_points])
+
+@app.get("/entitlements", response_model=EntitlementsResponse)
+def entitlements():
+    return EntitlementsResponse(
+        version=ENTITLEMENT_VERSION,
+        plans=[_plan_entitlements("FREE"), _plan_entitlements("PRO")],
+    )
+
+@app.get("/entitlements/me", response_model=CurrentEntitlementResponse)
+def entitlements_me(request: Request):
+    user_id = _resolve_user_id(request)
+    return _current_entitlement_for_user(user_id)
+
+@app.post("/admin/entitlements/set", response_model=AdminEntitlementSetResponse)
+def admin_set_entitlement(payload: AdminEntitlementSetRequest, request: Request):
+    _require_admin_token(request)
+    user_id = sanitize_user_id(payload.user_id)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid user_id.")
+    if payload.plan == "PRO" and payload.pro_days:
+        rec = grant_pro_days(user_id=user_id, days=payload.pro_days, source=payload.source)
+    else:
+        rec = set_user_entitlement(
+            user_id=user_id,
+            plan=payload.plan,
+            source=payload.source,
+            pro_expires_at_utc=None,
+        )
+    return AdminEntitlementSetResponse(
+        ok=True,
+        user_id=rec["user_id"],
+        plan=rec["plan"],
+        source=rec["source"],
+        pro_expires_at_utc=rec["pro_expires_at_utc"],
+        updated_at_utc=rec["updated_at_utc"],
+    )
+
+@app.post("/admin/invites/set", response_model=InviteAllowlistItem)
+def admin_set_invite(payload: AdminInviteSetRequest, request: Request):
+    _require_admin_token(request)
+    email = payload.email.strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email.")
+    expires_at = None
+    if payload.expires_in_days is not None:
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=payload.expires_in_days)).isoformat()
+    rec = set_invite_allowlist(
+        email=email,
+        role=payload.role,
+        plan_default=payload.plan_default,
+        expires_at_utc=expires_at,
+    )
+    return InviteAllowlistItem(
+        email=rec["email"],
+        role=rec["role"],
+        plan_default=rec["plan_default"],
+        expires_at_utc=rec["expires_at_utc"],
+        used_at_utc=rec["used_at_utc"],
+        updated_at_utc=rec["updated_at_utc"],
+    )
+
+@app.get("/admin/invites", response_model=AdminInviteListResponse)
+def admin_list_invites(request: Request, limit: int = 200):
+    _require_admin_token(request)
+    rows = list_invite_allowlist(limit=limit)
+    items = [
+        InviteAllowlistItem(
+            email=row["email"],
+            role=row["role"],
+            plan_default=row["plan_default"],
+            expires_at_utc=row["expires_at_utc"],
+            used_at_utc=row["used_at_utc"],
+            updated_at_utc=row["updated_at_utc"],
+        )
+        for row in rows
+    ]
+    return AdminInviteListResponse(count=len(items), items=items)
+
+
+@app.get("/billing/me", response_model=BillingStatusResponse)
+def billing_me(request: Request):
+    user_id = _resolve_user_id(request)
+    return _resolve_billing_status_for_user(user_id)
+
+
+@app.post("/billing/checkout/session", response_model=BillingCheckoutResponse)
+def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
+    mode = _billing_mode()
+    if mode != "stub":
+        raise HTTPException(status_code=503, detail="Only BILLING_MODE=stub is supported in this build.")
+
+    user_id = _resolve_user_id(request)
+    success_url = _validate_return_url(payload.success_url, "success_url")
+    cancel_url = _validate_return_url(payload.cancel_url, "cancel_url")
+    email = getattr(request.state, "opclab_email", None)
+    customer = get_billing_customer_by_user(user_id)
+    if customer is None:
+        customer = upsert_billing_customer(user_id=user_id, stripe_customer_id=_mock_customer_id(user_id), email=email)
+
+    session_id = _mock_checkout_session_id(user_id)
+    sub_id = _mock_subscription_id(user_id)
+    upsert_billing_subscription(
+        user_id=user_id,
+        stripe_subscription_id=sub_id,
+        stripe_customer_id=customer["stripe_customer_id"],
+        status="checkout_started",
+        current_period_end_utc=None,
+    )
+    redirect_url = _append_query_params(
+        success_url,
+        {"opclab_checkout": "stub", "session_id": session_id, "user": user_id},
+    )
+    _record_policy_audit(
+        endpoint="/billing/checkout/session",
+        method="POST",
+        client_id=user_id,
+        plan=_effective_plan_for_user(user_id),
+        decision="observed",
+        meta={
+            "mode": mode,
+            "price_id": payload.price_id or "env_default",
+            "cancel_url": cancel_url,
+            "redirect_url": redirect_url,
+        },
+    )
+    return BillingCheckoutResponse(url=redirect_url, session_id=session_id)
+
+
+@app.post("/billing/portal/session", response_model=BillingPortalResponse)
+def billing_portal_session(payload: BillingPortalRequest, request: Request):
+    mode = _billing_mode()
+    if mode != "stub":
+        raise HTTPException(status_code=503, detail="Only BILLING_MODE=stub is supported in this build.")
+    user_id = _resolve_user_id(request)
+    return_url = _validate_return_url(payload.return_url, "return_url")
+    customer = get_billing_customer_by_user(user_id)
+    if customer is None:
+        raise HTTPException(status_code=400, detail="No billing customer exists for this user yet.")
+    url = _append_query_params(
+        return_url,
+        {"opclab_portal": "stub", "customer_id": customer["stripe_customer_id"], "user": user_id},
+    )
+    _record_policy_audit(
+        endpoint="/billing/portal/session",
+        method="POST",
+        client_id=user_id,
+        plan=_effective_plan_for_user(user_id),
+        decision="observed",
+        meta={"mode": mode, "portal_url": url},
+    )
+    return BillingPortalResponse(url=url)
+
+
+@app.post("/billing/webhook/mock", response_model=BillingStatusResponse)
+def billing_webhook_mock(payload: BillingWebhookMockRequest, request: Request):
+    _require_admin_token(request)
+    mode = _billing_mode()
+    if mode != "stub":
+        raise HTTPException(status_code=503, detail="Mock webhook is only available in BILLING_MODE=stub.")
+
+    user_id = sanitize_user_id(payload.user_id)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Invalid user_id.")
+
+    if payload.stripe_customer_id:
+        customer_id = payload.stripe_customer_id
+    else:
+        known_customer = get_billing_customer_by_user(user_id)
+        customer_id = known_customer["stripe_customer_id"] if known_customer else _mock_customer_id(user_id)
+    upsert_billing_customer(user_id=user_id, stripe_customer_id=customer_id)
+
+    if payload.stripe_subscription_id:
+        subscription_id = payload.stripe_subscription_id
+    else:
+        existing_sub = get_billing_subscription_by_user(user_id)
+        subscription_id = existing_sub["stripe_subscription_id"] if existing_sub else _mock_subscription_id(user_id)
+    if not subscription_id:
+        subscription_id = _mock_subscription_id(user_id)
+
+    event_type = payload.event_type
+    incoming_status = (payload.status or "").strip().lower()
+    if event_type == "customer.subscription.deleted":
+        effective_status = "canceled"
+    elif incoming_status:
+        effective_status = incoming_status
+    else:
+        effective_status = "active"
+
+    period_days = payload.period_days if payload.period_days is not None else 30
+    period_end = _iso_after_days(period_days) if effective_status in {"active", "trialing", "past_due"} else None
+
+    upsert_billing_subscription(
+        user_id=user_id,
+        stripe_subscription_id=subscription_id,
+        stripe_customer_id=customer_id,
+        status=effective_status,
+        current_period_end_utc=period_end,
+    )
+
+    if effective_status in {"active", "trialing", "past_due"}:
+        set_user_entitlement(user_id=user_id, plan="PRO", source=payload.source, pro_expires_at_utc=period_end)
+    else:
+        set_user_entitlement(user_id=user_id, plan="FREE", source=payload.source, pro_expires_at_utc=None)
+
+    _record_policy_audit(
+        endpoint="/billing/webhook/mock",
+        method="POST",
+        client_id=user_id,
+        plan=_effective_plan_for_user(user_id),
+        decision="observed",
+        meta={
+            "event_type": event_type,
+            "status": effective_status,
+            "subscription_id": subscription_id,
+            "customer_id": customer_id,
+        },
+    )
+    return _resolve_billing_status_for_user(user_id)
+
+@app.get("/policy/audit", response_model=PolicyAuditResponse)
+def policy_audit(limit: int = 120):
+    capped = max(1, min(limit, 1000))
+    rows = list_policy_audit(capped)
+    records = [
+        PolicyAuditRecord(
+            ts_utc=row["ts_utc"],
+            endpoint=row["endpoint"],
+            method=row["method"],
+            client_id=row["client_id"],
+            plan=row["plan"],
+            decision=row["decision"],  # type: ignore[arg-type]
+            reason=row["reason"],
+            meta=row["meta"],
+        )
+        for row in rows
+    ]
+    return PolicyAuditResponse(count=len(records), records=records)
+
+@app.post("/events/ingest", response_model=EventIngestResponse)
+def ingest_events(payload: EventIngestRequest, request: Request):
+    client_id = _resolve_actor_id(request)
+    now = _now_utc_iso()
+    rows = [
+        {
+            "name": event.name,
+            "day_utc": _event_day_from_ts(event.ts),
+            "event_ts_utc": event.ts or now,
+            "ingested_ts_utc": now,
+            "client_id": client_id,
+            "payload": event.payload,
+        }
+        for event in payload.events
+    ]
+    accepted, dropped = ingest_product_events(rows, PRODUCT_EVENT_MAX_ROWS)
+    return EventIngestResponse(accepted=accepted, dropped=dropped)
+
+@app.get("/events/summary", response_model=EventSummaryResponse)
+def events_summary(window_days: int = 7):
+    window = max(1, min(window_days, 30))
+    today = datetime.now(timezone.utc).date()
+    day_keys = [(today - timedelta(days=i)).isoformat() for i in range(window - 1, -1, -1)]
+    by_day_counts: dict[str, dict[ProductEventName, int]] = {day: _zero_event_counts() for day in day_keys}
+    min_day = day_keys[0]
+    max_day = day_keys[-1]
+    events_snapshot = list_product_events(min_day, max_day)
+
+    for row in events_snapshot:
+        day = row["day_utc"]
+        name = row["name"]
+        if day not in by_day_counts:
+            continue
+        if name not in _PRODUCT_EVENT_NAMES:
+            continue
+        by_day_counts[day][name] += 1  # type: ignore[index]
+
+    totals = _zero_event_counts()
+    by_day: list[EventDailySummary] = []
+    for day in day_keys:
+        counts = by_day_counts[day]
+        for name in _PRODUCT_EVENT_NAMES:
+            totals[name] += counts[name]
+        by_day.append(
+            EventDailySummary(
+                day_utc=day,
+                counts=counts,
+                upgrade_click_rate=_safe_rate(
+                    counts["upgrade_prompt_clicked"], counts["upgrade_prompt_viewed"]
+                ),
+                export_block_rate=_safe_rate(
+                    counts["export_blocked_quota"], counts["export_attempted"]
+                ),
+            )
+        )
+
+    return EventSummaryResponse(
+        generated_at_utc=_now_utc_iso(),
+        window_days=window,
+        totals=totals,
+        by_day=by_day,
+        upgrade_click_rate=_safe_rate(
+            totals["upgrade_prompt_clicked"], totals["upgrade_prompt_viewed"]
+        ),
+        export_block_rate=_safe_rate(
+            totals["export_blocked_quota"], totals["export_attempted"]
+        ),
+    )
+
+@app.get("/trust/benchmarks/trend", response_model=BenchmarkTrendResponse)
+def trust_benchmark_trend(limit: int = 30):
+    capped = max(1, min(limit, 365))
+    points, history_count = _load_trust_history(capped)
+    return BenchmarkTrendResponse(
+        generated_at_utc=_now_utc_iso(),
+        history_count=history_count,
+        latest=_load_trust_latest(),
+        trend=points,
+    )
+
+@app.get("/usage/status", response_model=UsageStatus)
+def usage_status(request: Request, plan: Plan | None = None):
+    actor_id = _resolve_actor_id(request)
+    effective_plan = _effective_plan_for_request(request)
+    day = _day_utc()
+    bucket = db_get_usage_bucket(actor_id, day)
+    return _build_usage_status(day, effective_plan, bucket)
+
+@app.post("/usage/consume", response_model=UsageConsumeResponse)
+def usage_consume(payload: UsageConsumeRequest, request: Request):
+    actor_id = _resolve_actor_id(request)
+    effective_plan = _effective_plan_for_request(request)
+    allowed, granted, status, reason = _consume_usage_quota(
+        effective_plan, actor_id, payload.op, payload.amount, payload.clamp
+    )
+    _record_policy_audit(
+        endpoint="/usage/consume",
+        method="POST",
+        client_id=actor_id,
+        plan=effective_plan,
+        decision="allowed" if allowed else "blocked",
+        reason=reason,
+        meta={
+            "op": payload.op,
+            "amount_requested": payload.amount,
+            "amount_granted": granted,
+            "clamp": payload.clamp,
+            "requested_plan": payload.plan,
+        },
+    )
+    return UsageConsumeResponse(allowed=allowed, granted=granted, reason=reason, status=status)
+
+@app.post("/simulate", response_model=SimResponse)
+def simulate(req: SimRequest, request: Request):
+    actor_id = _resolve_actor_id(request)
+    effective_plan = _effective_plan_for_request(request)
+    requested_plan = req.plan
+    req = req.model_copy(deep=True)
+    req.plan = effective_plan
+    try:
+        policy_req = _apply_request_policy(req)
+    except HTTPException as exc:
+        _record_policy_audit(
+            endpoint="/simulate",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="blocked",
+            reason=str(exc.detail),
+            meta={"stage": "request_policy"},
+        )
+        raise
+    adjustments = _policy_adjustments(req, policy_req)
+    if adjustments:
+        _record_policy_audit(
+            endpoint="/simulate",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="adjusted",
+            meta=adjustments,
+        )
+    if requested_plan != effective_plan:
+        _record_policy_audit(
+            endpoint="/simulate",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="adjusted",
+            reason="Request plan overridden by server entitlement.",
+            meta={"requested_plan": requested_plan, "effective_plan": effective_plan},
+        )
+    usage_kind = (request.headers.get("x-opclab-usage-kind") or "run").strip().lower()
+    op: UsageOp = "sweep_points" if usage_kind == "sweep-point" else "runs"
+    allowed, _, status, reason = _consume_usage_quota(policy_req.plan, actor_id, op, 1, clamp=False)
+    if not allowed:
+        _record_policy_audit(
+            endpoint="/simulate",
+            method="POST",
+            client_id=actor_id,
+            plan=policy_req.plan,
+            decision="blocked",
+            reason=reason,
+            meta={"stage": "quota", "op": op},
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=reason or f"Daily {op} quota exceeded.",
+            headers={"X-OPCLAB-USAGE-REMAINING": str(status.remaining[op])},
+        )
+    _record_policy_audit(
+        endpoint="/simulate",
+        method="POST",
+        client_id=actor_id,
+        plan=policy_req.plan,
+        decision="allowed",
+        meta={"op": op},
+    )
+    return run_simulation(policy_req)
+
+@app.post("/simulate/batch", response_model=BatchSimResponse)
+def simulate_batch(batch: BatchSimRequest, request: Request):
+    actor_id = _resolve_actor_id(request)
+    effective_plan = _effective_plan_for_request(request)
+    requested_plan = batch.base.plan
+    batch = batch.model_copy(deep=True)
+    batch.base.plan = effective_plan
+    try:
+        base = _apply_request_policy(batch.base)
+    except HTTPException as exc:
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="blocked",
+            reason=str(exc.detail),
+            meta={"stage": "request_policy"},
+        )
+        raise
+    adjustments = _policy_adjustments(batch.base, base)
+    if adjustments:
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="adjusted",
+            meta=adjustments,
+        )
+    if requested_plan != effective_plan:
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=effective_plan,
+            decision="adjusted",
+            reason="Request plan overridden by server entitlement.",
+            meta={"requested_plan": requested_plan, "effective_plan": effective_plan},
+        )
+    values = _build_sweep_values(batch.start, batch.stop, batch.step)
+    requested_points = len(values)
+    max_points = FREE_SWEEP_MAX_POINTS if base.plan == "FREE" else PRO_SWEEP_MAX_POINTS
+    clamped_by_plan = False
+    if len(values) > max_points:
+        values = values[:max_points]
+        clamped_by_plan = True
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=base.plan,
+            decision="clamped",
+            reason="Plan sweep point cap applied.",
+            meta={"requested_points": requested_points, "granted_points": len(values)},
+        )
+
+    quota_note = None
+    allowed, granted, status, reason = _consume_usage_quota(
+        base.plan, actor_id, "sweep_points", len(values), clamp=True
+    )
+    if not allowed:
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=base.plan,
+            decision="blocked",
+            reason=reason,
+            meta={"stage": "quota", "op": "sweep_points"},
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=reason or "Daily sweep_points quota exceeded.",
+            headers={"X-OPCLAB-USAGE-REMAINING": str(status.remaining["sweep_points"])},
+        )
+    if granted < len(values):
+        before_quota = len(values)
+        values = values[:granted]
+        quota_note = (
+            f"Point count clamped by daily quota: granted {granted}, "
+            f"remaining {status.remaining['sweep_points']}."
+        )
+        _record_policy_audit(
+            endpoint="/simulate/batch",
+            method="POST",
+            client_id=actor_id,
+            plan=base.plan,
+            decision="clamped",
+            reason="Daily sweep point quota clamp applied.",
+            meta={"requested_points": before_quota, "granted_points": granted},
+        )
+
+    points: list[BatchPoint] = []
+    for value in values:
+        req = base.model_copy(deep=True)
+        _set_sweep_param(req, batch.param, value)
+        req = _apply_request_policy(req)
+        sim = run_simulation(req)
+
+        contours = None
+        if batch.include_contours:
+            contours = [_decimate_polyline(c, batch.max_points_per_contour) for c in sim.contours_nm]
+
+        points.append(
+            BatchPoint(
+                value=float(value),
+                metrics=sim.metrics,
+                contours_nm=contours,
+            )
+        )
+
+    note = None
+    if clamped_by_plan:
+        note = f"Point count clamped to {max_points} for plan {base.plan}."
+    if quota_note:
+        note = f"{note + ' ' if note else ''}{quota_note}"
+
+    _record_policy_audit(
+        endpoint="/simulate/batch",
+        method="POST",
+        client_id=actor_id,
+        plan=base.plan,
+        decision="clamped" if (clamped_by_plan or quota_note is not None) else "allowed",
+        meta={"requested_points": requested_points, "returned_points": len(points)},
+    )
+
+    return BatchSimResponse(
+        param=batch.param,
+        points=points,
+        count=len(points),
+        clamped_by_plan=clamped_by_plan,
+        note=note,
+    )

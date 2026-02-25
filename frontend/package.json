@@ -1,0 +1,18 @@
+{
+  "name": "opclab-frontend",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:clean": "powershell -NoProfile -Command \"if (Test-Path .next) { try { Remove-Item .next -Recurse -Force -ErrorAction Stop } catch { Write-Host 'Skipping .next cleanup because it is in use.' } }\"; next dev"
+  },
+  "dependencies": {
+    "next": "^14.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "25.2.3",
+    "@types/react": "19.2.14",
+    "typescript": "5.9.3"
+  }
+}
