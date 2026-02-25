@@ -2,12 +2,14 @@ import os
 import math
 import re
 import json
+import hmac
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .models import (
     BatchPoint,
@@ -140,12 +142,25 @@ app.add_middleware(
 def startup_init_store():
     ensure_db()
 
+def _has_valid_admin_token(request: Request) -> bool:
+    expected = os.getenv("OPCLAB_ADMIN_TOKEN", "").strip()
+    if not expected:
+        return False
+    given = (request.headers.get("x-opclab-admin-token") or "").strip()
+    if not given:
+        return False
+    return hmac.compare_digest(given, expected)
+
 def _should_bypass_allowlist(request: Request) -> bool:
     # Keep CORS preflight and liveness probe reachable regardless of invite state.
     if request.method.upper() == "OPTIONS":
         return True
     normalized_path = request.url.path.rstrip("/") or "/"
-    return normalized_path == "/health"
+    if normalized_path == "/health":
+        return True
+    if normalized_path.startswith("/admin/") and _has_valid_admin_token(request):
+        return True
+    return False
 
 @app.middleware("http")
 async def auth_identity_middleware(request: Request, call_next):
@@ -154,9 +169,15 @@ async def auth_identity_middleware(request: Request, call_next):
     if enforce_allowlist and not _should_bypass_allowlist(request):
         email = (identity.email or "").strip().lower()
         if not email:
-            raise HTTPException(status_code=403, detail="Invite-only mode requires email identity.")
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Invite-only mode requires email identity."},
+            )
         if not is_invite_allowed(email):
-            raise HTTPException(status_code=403, detail="This account is not allowlisted for staging.")
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "This account is not allowlisted for staging."},
+            )
         invite = get_invite_allowlist(email)
         if invite is not None:
             existing = get_user_entitlement(identity.user_id)
