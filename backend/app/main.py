@@ -138,9 +138,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+def _bootstrap_user_id(raw_user_id: str) -> str:
+    cleaned = sanitize_user_id(raw_user_id)
+    if not cleaned:
+        return ""
+    if ":" in cleaned:
+        return cleaned
+    return f"hdr:{cleaned}"
+
+
+def _bootstrap_local_master_pro() -> None:
+    # Local/internal convenience bootstrap. Never run in production.
+    if os.getenv("ENV", "development").lower() == "production":
+        return
+    if os.getenv("LOCAL_BOOTSTRAP_MASTER_PRO", "1").strip() != "1":
+        return
+    user_id = _bootstrap_user_id(os.getenv("LOCAL_BOOTSTRAP_MASTER_USER_ID", "master"))
+    if not user_id:
+        return
+    set_user_entitlement(
+        user_id=user_id,
+        plan="PRO",
+        source="local_bootstrap_master",
+        pro_expires_at_utc=None,
+    )
+    email = (os.getenv("LOCAL_BOOTSTRAP_MASTER_EMAIL", "master@opc-lab") or "").strip().lower()
+    if "@" in email:
+        set_invite_allowlist(
+            email=email,
+            role="admin",
+            plan_default="PRO",
+            expires_at_utc=None,
+        )
+
+
 @app.on_event("startup")
 def startup_init_store():
     ensure_db()
+    _bootstrap_local_master_pro()
 
 def _cors_json_response(request: Request, status_code: int, detail: str) -> JSONResponse:
     resp = JSONResponse(status_code=status_code, content={"detail": detail})
@@ -265,7 +301,6 @@ def _enforce_plan(req: SimRequest) -> None:
     # Enforce FREE constraints server-side
     if req.plan == "FREE":
         req.grid = 512
-        req.return_intensity = False
         # FREE: EUV is low-NA only
         if req.preset_id == "EUV_HNA":
             req.preset_id = "EUV_LNA"

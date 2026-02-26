@@ -125,10 +125,10 @@ def run_simulation(req: SimRequest) -> SimResponse:
 
     metrics = Metrics(cd_nm=cd_nm)
 
-    # 7) Optional intensity payload (Pro heatmap)
+    # 7) Optional intensity payload (Aerial heatmap)
     payload = None
-    if req.return_intensity and req.plan == "PRO":
-        # Use a higher heatmap payload for PRO so small features remain readable in 3D.
+    if req.return_intensity:
+        # Adaptive payload keeps small features readable while controlling response size.
         target = _pro_intensity_target(req, shapes, fov_nm)
         small = downsample_to_256(intensity, target=target)
         payload = IntensityPayload(

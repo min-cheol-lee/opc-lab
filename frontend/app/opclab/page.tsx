@@ -81,8 +81,8 @@ type CustomMaskPreset = {
 
 const DEFAULT_PARAMS: Record<string, number> = {
   fov_nm: 1100,
-  cd_nm: 80,
-  w_nm: 80,
+  cd_nm: 100,
+  w_nm: 100,
   length_nm: 900,
   pitch_nm: 140,
   serif_nm: 28,
@@ -94,7 +94,7 @@ const DEFAULT_PARAMS: Record<string, number> = {
   step_w_nm: 40,
   step_h_nm: 40,
   n_steps: 12,
-  thickness_nm: 80,
+  thickness_nm: 100,
 };
 
 export default function Page() {
@@ -147,7 +147,7 @@ export default function Page() {
   const workspacePinchRef = useRef<{ startDistance: number; startScale: number } | null>(null);
 
   const grid = plan === "PRO" ? 1024 : 512;
-  const returnIntensity = plan === "PRO";
+  const returnIntensity = true;
   const effectiveParams = { ...params, sraf_on: 0 };
 
   const req: SimRequest = {
@@ -434,11 +434,11 @@ export default function Page() {
     if (maskMode === "CUSTOM") {
       const idx = Math.max(0, Math.min(sweepCustomTargetIndex, customShapes.length - 1));
       const s = customShapes[idx];
-      return s && s.type === "rect" ? s.w_nm : (params.cd_nm ?? 80);
+      return s && s.type === "rect" ? s.w_nm : (params.cd_nm ?? 100);
     }
-    if (templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") return params.w_nm ?? params.cd_nm ?? 80;
-    if (templateId === "STAIRCASE") return params.thickness_nm ?? params.cd_nm ?? 80;
-    return params.cd_nm ?? 80;
+    if (templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") return params.w_nm ?? params.cd_nm ?? 100;
+    if (templateId === "STAIRCASE") return params.thickness_nm ?? params.cd_nm ?? 100;
+    return params.cd_nm ?? 100;
   }
 
   useEffect(() => {
@@ -541,7 +541,7 @@ export default function Page() {
     }
     const cap = PRO_CUSTOM_SHAPE_LIMIT;
     if (customShapes.length >= cap) return;
-    const cd = Math.max(20, Math.min(900, params.cd_nm ?? 80));
+    const cd = Math.max(20, Math.min(900, params.cd_nm ?? 100));
     const h = Math.max(60, Math.min(900, params.length_nm ?? 260));
     const cx = (params.fov_nm ?? 1100) * 0.5;
     const cy = (params.fov_nm ?? 1100) * 0.5;

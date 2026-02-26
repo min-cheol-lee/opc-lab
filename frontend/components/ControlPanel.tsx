@@ -240,12 +240,6 @@ export function ControlPanel(props: {
     return Math.max(lo, Math.min(hi, v));
   }
 
-  function usagePercent(used: number, limit: number): number {
-    if (!Number.isFinite(limit) || limit <= 0) return 0;
-    const pct = Math.round((used / limit) * 100);
-    return Math.max(0, Math.min(100, pct));
-  }
-
   function setParam(key: string, v: number) {
     setParams({ ...params, [key]: v });
   }
@@ -330,9 +324,17 @@ export function ControlPanel(props: {
 
   return (
     <div className="opclab-panel panel-compact" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div className="panel-head panel-head-compact">
-        <h2 className="panel-title panel-title-compact">OPC Lab</h2>
-        <div className="panel-sub">Simulator</div>
+      <div className="panel-head panel-head-compact panel-brand-head">
+        <div className="panel-brand">
+          <div className="panel-brand-text">
+            <h2 className="panel-brand-wordmark">
+              <span className="wordmark-opc">OPC</span>
+              <span className="wordmark-lab">LAB</span>
+            </h2>
+            <div className="panel-brand-divider" aria-hidden="true" />
+            <div className="panel-brand-sub">Simulator</div>
+          </div>
+        </div>
       </div>
       <div className="panel-body panel-body-compact">
         <div className="group-card compact">
@@ -359,7 +361,7 @@ export function ControlPanel(props: {
                 {usageLoading
                   ? "Loading usage..."
                   : usageStatus
-                    ? `Runs ${usageStatus.usage.runs}/${usageStatus.limits.runs} · Sweep ${usageStatus.usage.sweep_points}/${usageStatus.limits.sweep_points} · Export ${usageStatus.usage.exports}/${usageStatus.limits.exports}`
+                    ? `Runs ${usageStatus.usage.runs}/${usageStatus.limits.runs} | Sweep ${usageStatus.usage.sweep_points}/${usageStatus.limits.sweep_points} | Export ${usageStatus.usage.exports}/${usageStatus.limits.exports}`
                     : "Usage unavailable"}
               </div>
               <div className="plan-collapsed-secondary">
@@ -370,26 +372,10 @@ export function ControlPanel(props: {
             <div className="plan-cockpit">
             {usageLoading && <div className="small-note tiny-note">Loading usage...</div>}
             {usageStatus && (
-              <div className="plan-metrics-grid">
-                {[
-                  { key: "runs", label: "Runs/day", used: usageStatus.usage.runs, limit: usageStatus.limits.runs },
-                  { key: "sweep", label: "Sweep pts/day", used: usageStatus.usage.sweep_points, limit: usageStatus.limits.sweep_points },
-                  { key: "exports", label: "Exports/day", used: usageStatus.usage.exports, limit: usageStatus.limits.exports },
-                ].map((m) => {
-                  const pct = usagePercent(m.used, m.limit);
-                  return (
-                    <div key={m.key} className="plan-metric-card">
-                      <div className="plan-metric-top">
-                        <span>{m.label}</span>
-                        <b>{m.used}/{m.limit}</b>
-                      </div>
-                      <div className="plan-meter-track" aria-hidden="true">
-                        <span style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="plan-meter-foot">{pct}% used</div>
-                    </div>
-                  );
-                })}
+              <div className="plan-metrics-inline">
+                <span><b>Runs</b> {usageStatus.usage.runs}/{usageStatus.limits.runs}</span>
+                <span><b>Sweep</b> {usageStatus.usage.sweep_points}/{usageStatus.limits.sweep_points}</span>
+                <span><b>Export</b> {usageStatus.usage.exports}/{usageStatus.limits.exports}</span>
               </div>
             )}
 
@@ -650,7 +636,7 @@ export function ControlPanel(props: {
               min={1}
               max={900}
               step={1}
-              value={maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 80)}
+              value={maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 100)}
               onChange={(e) => setCd(parseFloat(e.target.value))}
               style={{ flex: 1 }}
             />
@@ -659,7 +645,7 @@ export function ControlPanel(props: {
               min={1}
               max={900}
               step={1}
-              value={Math.round(maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 80))}
+              value={Math.round(maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 100))}
               onChange={(e) => setCd(parseFloat(e.target.value))}
               style={{ width: 88 }}
             />

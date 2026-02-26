@@ -1184,7 +1184,7 @@ export function Viewport(props: {
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 560, opacity: showAerial ? 1 : 0.45 }}>
                 <span style={{ width: 16, height: 8, borderRadius: 2, background: "linear-gradient(90deg, rgba(92,225,230,0.65), rgba(255,69,58,0.62))" }} />
-                Aerial (PRO)
+                Aerial
               </span>
               {compareActive && (
                 <>
@@ -1694,8 +1694,8 @@ export function Viewport(props: {
               position: "relative",
               border: "1px solid rgba(122,128,140,0.3)",
               borderRadius: 13,
-              background: "linear-gradient(180deg, rgba(250,251,253,0.95), rgba(239,241,245,0.93))",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.86), inset 0 -18px 40px rgba(66,72,86,0.08), 0 14px 28px rgba(16,24,38,0.14)",
+              background: "linear-gradient(168deg, rgba(249,252,255,0.96) 0%, rgba(236,243,252,0.92) 54%, rgba(225,235,248,0.9) 100%)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.88), inset 0 -22px 44px rgba(52,64,86,0.10), 0 14px 28px rgba(16,24,38,0.14)",
               overflow: "hidden",
               height: panelHeight,
               display: "flex",
@@ -1703,16 +1703,6 @@ export function Viewport(props: {
               isolation: "isolate",
             }}
           >
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                inset: 0,
-                pointerEvents: "none",
-                zIndex: 0,
-                background: "radial-gradient(92% 70% at 84% 8%, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 74%), radial-gradient(96% 82% at 18% 96%, rgba(188,196,214,0.14) 0%, rgba(188,196,214,0) 78%)",
-              }}
-            />
             {renderSweepStatusLine("3d")}
             <div className="surface-controls surface-controls-compact" style={{ position: "relative", zIndex: 1 }}>
               <label className="surface-inline-item">
@@ -1790,7 +1780,8 @@ export function Viewport(props: {
                 height: "100%",
                 border: "1px solid rgba(96,108,132,0.4)",
                 borderRadius: 11,
-                background: "radial-gradient(138% 156% at 14% 4%, #2a3442 0%, #1d2531 44%, #121a24 100%)",
+                background:
+                  "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
                 boxShadow: "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
                 cursor: "grab",
               }}
@@ -1827,7 +1818,7 @@ export function Viewport(props: {
               />
               {!sim?.intensity && (
                 <div className="small-note" style={{ marginTop: 6 }}>
-                  Run simulation in PRO to generate 3D aerial surface.
+                  Run simulation to generate 3D aerial surface.
                 </div>
               )}
             </div>
@@ -2881,6 +2872,17 @@ function clampRectToFov(
   return { type: "rect", x_nm, y_nm, w_nm, h_nm };
 }
 
+function fitDenseLineCountInFov(cdNm: number, pitchNm: number, requestedN: number, fovNm: number): number {
+  const cd = Math.max(0, Number.isFinite(cdNm) ? cdNm : 0);
+  const pitch = Math.abs(Number.isFinite(pitchNm) ? pitchNm : 0);
+  const nReq = Math.max(1, Math.floor(Number.isFinite(requestedN) ? requestedN : 1));
+  const fov = Math.max(1e-6, Number.isFinite(fovNm) ? fovNm : 1);
+  if (pitch < 1e-9) return 1;
+  if (fov <= cd) return 1;
+  const maxN = Math.floor((fov - cd) / pitch) + 1;
+  return Math.max(1, Math.min(nReq, maxN));
+}
+
 function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: number; y: number; w: number; h: number }> {
   const t = req.mask.template_id;
   const p = req.mask.params_nm ?? {};
@@ -2907,7 +2909,7 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   if (t === "ISO_LINE") {
-    const cd = p.cd_nm ?? 80;
+    const cd = p.cd_nm ?? 100;
     const h = p.length_nm ?? 900;
     rects.push({ x: cx - cd / 2, y: cy - h / 2, w: cd, h });
   }
@@ -2915,7 +2917,8 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   else if (t === "DENSE_LS") {
     const cd = p.cd_nm ?? 60;
     const pitch = p.pitch_nm ?? 140;
-    const n = Math.max(1, Math.floor(p.n_lines ?? 7));
+    const nReq = Math.max(1, Math.floor(p.n_lines ?? 7));
+    const n = fitDenseLineCountInFov(cd, pitch, nReq, fov);
     const h = p.length_nm ?? 900;
     const start = cx - ((n - 1) * pitch) / 2;
     for (let i = 0; i < n; i++) {
@@ -2924,13 +2927,13 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   else if (t === "LINE_END_RAW") {
-    const cd = p.cd_nm ?? 80;
+    const cd = p.cd_nm ?? 100;
     const h = p.length_nm ?? 900;
     rects.push({ x: cx - cd / 2, y: cy - h / 2, w: cd, h });
   }
 
   else if (t === "LINE_END_OPC_HAMMER") {
-    const cd = p.cd_nm ?? 80;
+    const cd = p.cd_nm ?? 100;
     const h = p.length_nm ?? 900;
     const hammerW = p.hammer_w_nm ?? Math.max(1.8 * cd, cd + 40);
     const hammerH = p.hammer_h_nm ?? Math.max(0.35 * cd, 24);
@@ -2943,14 +2946,14 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
 
   else if (t === "L_CORNER_RAW") {
     const arm = p.arm_nm ?? 700;
-    const cd = p.cd_nm ?? 80;
+    const cd = p.cd_nm ?? 100;
     rects.push({ x: cx - arm / 2, y: cy - cd / 2, w: arm, h: cd });
     rects.push({ x: cx - cd / 2, y: cy - arm / 2, w: cd, h: arm });
   }
 
   else if (t === "L_CORNER_OPC_SERIF") {
     const arm = p.arm_nm ?? 700;
-    const cd = p.cd_nm ?? 80;
+    const cd = p.cd_nm ?? 100;
     const serif = p.serif_nm ?? Math.max(0.4 * cd, 20);
     const xh = cx - arm / 2;
     const yh = cy - cd / 2;
@@ -2969,12 +2972,12 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   else if (t === "CONTACT_RAW") {
-    const w = p.w_nm ?? p.cd_nm ?? 80;
+    const w = p.w_nm ?? p.cd_nm ?? 100;
     rects.push({ x: cx - w / 2, y: cy - w / 2, w, h: w });
   }
 
   else if (t === "CONTACT_OPC_SERIF") {
-    const w = p.w_nm ?? p.cd_nm ?? 80;
+    const w = p.w_nm ?? p.cd_nm ?? 100;
     const serif = p.serif_nm ?? Math.max(0.35 * w, 20);
     const half = w / 2;
     rects.push({ x: cx - half, y: cy - half, w, h: w });
@@ -2988,7 +2991,7 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
     const stepW = p.step_w_nm ?? 40;
     const stepH = p.step_h_nm ?? 40;
     const n = Math.max(1, Math.floor(p.n_steps ?? 12));
-    const thickness = p.thickness_nm ?? p.cd_nm ?? 80;
+    const thickness = p.thickness_nm ?? p.cd_nm ?? 100;
     const x0 = cx - (n * stepW) / 2;
     const y0 = cy - (n * stepH) / 2;
     for (let i = 0; i < n; i++) {
@@ -2998,7 +3001,7 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   else {
-    const w = p.w_nm ?? 80;
+    const w = p.w_nm ?? 100;
     rects.push({ x: cx - w / 2, y: cy - w / 2, w, h: w });
   }
 
@@ -3116,18 +3119,18 @@ function rectPath(x: number, y: number, w: number, h: number, fovNm: number): st
 function estimateMaskCdNm(req: SimRequest): number {
   if (req.mask.mode === "CUSTOM") {
     const shapes = req.mask.shapes ?? [];
-    if (!shapes.length) return 80;
+    if (!shapes.length) return 100;
     const first = shapes[0];
     if (first.type === "rect") return Math.max(1, first.w_nm);
     const xs = first.points_nm.map((p) => p.x_nm);
-    if (!xs.length) return 80;
+    if (!xs.length) return 100;
     return Math.max(1, Math.max(...xs) - Math.min(...xs));
   }
   const p = req.mask.params_nm ?? {};
   const t = req.mask.template_id;
-  if (t === "CONTACT_RAW" || t === "CONTACT_OPC_SERIF") return p.w_nm ?? p.cd_nm ?? 80;
-  if (t === "STAIRCASE") return p.thickness_nm ?? p.cd_nm ?? 80;
-  return p.cd_nm ?? 80;
+  if (t === "CONTACT_RAW" || t === "CONTACT_OPC_SERIF") return p.w_nm ?? p.cd_nm ?? 100;
+  if (t === "STAIRCASE") return p.thickness_nm ?? p.cd_nm ?? 100;
+  return p.cd_nm ?? 100;
 }
 
 function calcContourStrokeScale(

@@ -67,7 +67,7 @@ class SimRequest(BaseModel):
     mask: MaskSpec
     dose: float = Field(0.5, ge=0.0, le=1.0)           # threshold proxy
     focus: float = Field(0.0, ge=0.0, le=1.0)          # Pro blur proxy
-    return_intensity: bool = False                     # Pro only
+    return_intensity: bool = False                     # Optional aerial intensity payload
 
 
 SweepParam = Literal[
