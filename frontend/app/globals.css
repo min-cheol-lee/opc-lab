@@ -22,6 +22,8 @@
   font-display: swap;
 }
 :root {
+  --font-inter: "Inter";
+  --font-montserrat: "Montserrat";
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   --bg: #eef1f6;
@@ -255,73 +257,92 @@ select:focus {
 }
 
 .panel-brand-text {
+  --logo-h: clamp(27px, 2.05vw, 30px);
+  --logo-main-tracking: 0.0025em;
+  --logo-opc-tighten: -0.043em;
+  --logo-lab-tighten: -0.04em;
+  --logo-word-gap: 3.6px;
+  --logo-divider-thickness: clamp(1px, calc(var(--logo-h) * 0.016), 2px);
+  --logo-gap-main-divider: calc(var(--logo-h) * 0.145);
+  --logo-divider-ratio: 0.93;
+  --logo-gap-divider-tagline: calc(var(--logo-h) * 0.215);
+  --logo-tagline-size: calc(var(--logo-h) * 0.35);
+  --logo-tagline-tracking: 0.05em;
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 0;
   justify-items: center;
+  width: fit-content;
+  color: #141414;
+  shape-rendering: geometricPrecision;
 }
 
 .panel-brand-wordmark {
   margin: 0;
-  line-height: 0.94;
-  font-size: clamp(25px, 2.03vw, 28px);
-  font-family: "UbuntuLightBrand", "Ubuntu", "Oxanium", "Rajdhani", "DIN Alternate", "SF Pro Display", "SF Pro Text", var(--font-sans);
+  line-height: 1;
+  font-size: var(--logo-h);
+  font-family: var(--font-montserrat), var(--font-sans);
   text-rendering: geometricPrecision;
   display: inline-block;
-  transform: scaleY(1.15);
-  transform-origin: left center;
   text-align: center;
+  letter-spacing: var(--logo-main-tracking);
+  color: currentColor;
 }
 
 .wordmark-opc {
-  font-weight: 300;
-  background: linear-gradient(180deg, #2a3f5f 0%, #1a2f4b 45%, #10233d 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  letter-spacing: 0.0072em;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-weight: 400;
+  color: currentColor;
+  letter-spacing: 0;
 }
 
 .wordmark-lab {
-  margin-left: 6px;
-  font-weight: 300;
-  background: linear-gradient(180deg, #2e4568 0%, #1d3555 46%, #122844 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  letter-spacing: 0.0054em;
+  margin-left: var(--logo-word-gap);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  font-weight: 400;
+  color: currentColor;
+  letter-spacing: 0;
+}
+
+.wordmark-opc > span,
+.wordmark-lab > span {
+  display: inline-block;
+}
+
+.wordmark-opc > span + span {
+  margin-left: var(--logo-opc-tighten);
+}
+
+.wordmark-lab > span + span {
+  margin-left: var(--logo-lab-tighten);
 }
 
 .panel-brand-divider {
-  height: 1px;
-  width: min(172px, 98%);
-  margin-top: 1px;
-  margin-bottom: 1px;
+  height: var(--logo-divider-thickness);
+  width: calc(100% * var(--logo-divider-ratio));
+  margin-top: var(--logo-gap-main-divider);
+  margin-bottom: var(--logo-gap-divider-tagline);
   border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    rgba(25, 42, 66, 0) 0%,
-    rgba(25, 42, 66, 0.26) 8%,
-    rgba(25, 42, 66, 0.34) 34%,
-    rgba(25, 42, 66, 0.28) 72%,
-    rgba(25, 42, 66, 0.16) 90%,
-    rgba(25, 42, 66, 0) 100%
-  );
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.24);
+  background: currentColor;
+  opacity: 0.8;
+  box-shadow: none;
 }
 
 .panel-brand-sub {
   margin-top: 0;
-  font-size: 10px;
-  font-family: "SimulatorSub", "Ubuntu", "SF Pro Text", "SF Pro Display", var(--font-sans);
-  font-weight: 500;
-  letter-spacing: 0.07em;
-  line-height: 0.9;
+  font-size: var(--logo-tagline-size);
+  font-family: var(--font-montserrat), var(--font-sans);
+  font-weight: 400;
+  letter-spacing: var(--logo-tagline-tracking);
+  line-height: 1;
   display: inline-block;
-  transform: scaleY(0.9);
-  transform-origin: left top;
-  text-transform: uppercase;
-  color: rgba(66, 84, 112, 0.84);
+  text-transform: none;
+  color: currentColor;
+  opacity: 0.86;
   text-align: center;
   justify-self: center;
 }

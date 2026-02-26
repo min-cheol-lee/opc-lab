@@ -26,6 +26,31 @@ def _min_printable_cd_nm(wavelength_nm: float, na: float, is_immersion: bool) ->
     return k1 * wavelength_nm / max(na, 1e-6)
 
 def _requested_cd_nm(req: SimRequest) -> float | None:
+    # CUSTOM mode can keep stale params_nm.cd_nm (e.g. when rectangles are moved/resized
+    # directly in the canvas). For printability guard, derive CD from actual geometry first.
+    if req.mask.mode == "CUSTOM":
+        dims: list[float] = []
+        for s in req.mask.shapes or []:
+            stype = getattr(s, "type", "rect")
+            if stype == "rect":
+                w = float(getattr(s, "w_nm", 0.0))
+                h = float(getattr(s, "h_nm", 0.0))
+                d = min(w, h)
+                if d > 0:
+                    dims.append(d)
+            elif stype == "polygon":
+                pts = getattr(s, "points_nm", []) or []
+                xs = [float(getattr(p, "x_nm", 0.0)) for p in pts]
+                ys = [float(getattr(p, "y_nm", 0.0)) for p in pts]
+                if xs and ys:
+                    d = min(max(xs) - min(xs), max(ys) - min(ys))
+                    if d > 0:
+                        dims.append(d)
+        if dims:
+            # Do not let tiny assist/edge rectangles suppress the whole CUSTOM mask.
+            # Use the dominant printable CD proxy (largest local CD) instead of the thinnest one.
+            return max(dims)
+
     p = req.mask.params_nm
     if not p:
         return None

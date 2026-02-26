@@ -328,8 +328,16 @@ export function ControlPanel(props: {
         <div className="panel-brand">
           <div className="panel-brand-text">
             <h2 className="panel-brand-wordmark">
-              <span className="wordmark-opc">OPC</span>
-              <span className="wordmark-lab">LAB</span>
+              <span className="wordmark-opc" aria-label="OPC">
+                <span>O</span>
+                <span>P</span>
+                <span>C</span>
+              </span>
+              <span className="wordmark-lab" aria-label="Lab">
+                <span>L</span>
+                <span>a</span>
+                <span>b</span>
+              </span>
             </h2>
             <div className="panel-brand-divider" aria-hidden="true" />
             <div className="panel-brand-sub">Simulator</div>

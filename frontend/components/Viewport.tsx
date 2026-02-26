@@ -1324,6 +1324,7 @@ export function Viewport(props: {
                 />
               ))}
               {req.mask.mode === "CUSTOM" && selectedCustomRect && (() => {
+                const handleRadiusNm = 4.2 / Math.max(scale, 0.0001);
                 const left = selectedCustomRect.x_nm;
                 const right = selectedCustomRect.x_nm + selectedCustomRect.w_nm;
                 const top = fovNm - (selectedCustomRect.y_nm + selectedCustomRect.h_nm);
@@ -1352,7 +1353,7 @@ export function Viewport(props: {
                         key={`rect-handle-${c.key}`}
                         cx={c.x}
                         cy={c.y}
-                        r={4.2}
+                        r={handleRadiusNm}
                         fill="rgba(235,246,255,0.95)"
                         stroke="rgba(60,130,212,0.9)"
                         strokeWidth={1.1}
