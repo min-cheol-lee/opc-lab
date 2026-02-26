@@ -13,6 +13,14 @@
   font-style: normal;
   font-display: swap;
 }
+
+@font-face {
+  font-family: "UbuntuLightBrand";
+  src: url("/fonts/ubuntu/UbuntuLight-8zBJ.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
@@ -257,7 +265,7 @@ select:focus {
   margin: 0;
   line-height: 0.94;
   font-size: clamp(25px, 2.03vw, 28px);
-  font-family: "MainluxBrand", "Ubuntu", "Oxanium", "Rajdhani", "DIN Alternate", "SF Pro Display", "SF Pro Text", var(--font-sans);
+  font-family: "UbuntuLightBrand", "Ubuntu", "Oxanium", "Rajdhani", "DIN Alternate", "SF Pro Display", "SF Pro Text", var(--font-sans);
   text-rendering: geometricPrecision;
   display: inline-block;
   transform: scaleY(1.15);
@@ -266,7 +274,7 @@ select:focus {
 }
 
 .wordmark-opc {
-  font-weight: 400;
+  font-weight: 300;
   background: linear-gradient(180deg, #2a3f5f 0%, #1a2f4b 45%, #10233d 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -276,7 +284,7 @@ select:focus {
 
 .wordmark-lab {
   margin-left: 6px;
-  font-weight: 400;
+  font-weight: 300;
   background: linear-gradient(180deg, #2e4568 0%, #1d3555 46%, #122844 100%);
   -webkit-background-clip: text;
   background-clip: text;
