@@ -1,157 +1,163 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>OPC Lab Simulator</title>
+    <title>litopc | Educational OPC Simulator</title>
     <meta
       name="description"
-      content="OPC Lab Simulator. Run sweep studies, compare A/B mask strategies, and inspect synchronized 2D/3D lithography behavior."
+      content="Visualize why OPC matters with practical Contact Raw vs Contact Serif examples, then launch the simulator."
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="bg-grain" aria-hidden="true"></div>
+    <div class="bg-grid" aria-hidden="true"></div>
 
     <header class="topbar">
-      <a class="brand" href="#">OPC Lab</a>
+      <a class="brand" href="#" aria-label="litopc.">
+        <span class="brand-text">litopc</span>
+        <span class="brand-dot" aria-hidden="true">.</span>
+      </a>
       <nav class="top-actions" aria-label="Primary">
-        <a class="btn btn-subtle" href="#opclab">What is OPC?</a>
+        <a class="btn btn-subtle" href="#why-opc">Why OPC matters?</a>
+        <a class="btn btn-subtle" href="#contact-example">Contact Example</a>
         <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Open Simulator</a>
       </nav>
     </header>
 
     <main class="page">
       <section class="hero" data-reveal>
-        <p class="eyebrow">Optical Proximity Correction Simulator</p>
-        <h1>Pattern decisions that print right at nanometer scale.</h1>
-        <p class="hero-copy">
-          Explore lithography behavior with Sweep Mode, A/B comparison, and synchronized 2D/3D views in one fast workflow.
-        </p>
-        <div class="hero-cta">
-          <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch OPC Lab</a>
-          <a class="btn btn-subtle" href="#showcase">View Features</a>
+        <div class="hero-copy">
+          <p class="kicker">Educational OPC Simulator</p>
+          <h1>See mask choices become wafer reality.</h1>
+          <p>
+            Fast visual examples first. Then run your own cases in the full simulator.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch litopc Simulator</a>
+            <a class="btn btn-subtle" href="#contact-example">View Practical Example</a>
+          </div>
         </div>
 
-        <figure class="hero-visual" aria-label="Simulator showcase">
-          <div class="sim-shell">
-            <div class="sim-toolbar-row">
-              <span class="tool-chip">Zoom</span>
-              <span class="tool-chip">View</span>
-              <span class="tool-chip">Export</span>
-              <span class="tool-chip active">Sweep View</span>
-            </div>
-
-            <div class="sim-layout">
-              <aside class="sim-sidebar" aria-hidden="true">
-                <div class="side-block side-head"></div>
-                <div class="side-block"></div>
-                <div class="side-block"></div>
-                <div class="side-block"></div>
-              </aside>
-
-              <div class="sim-stage-wrap">
-                <div class="sim-stage">
-                  <div class="sim-legend">
-                    <span><i class="legend-dot mask"></i>Mask</span>
-                    <span><i class="legend-dot contour"></i>Contour</span>
-                    <span><i class="legend-dot aerial"></i>Aerial</span>
-                  </div>
-
-                  <svg viewBox="0 0 740 430" role="img" aria-label="OPC contour animation">
-                    <defs>
-                      <linearGradient id="bgPanel" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#1b2f4c" />
-                        <stop offset="100%" stop-color="#10223a" />
-                      </linearGradient>
-                      <linearGradient id="aerialFill" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stop-color="rgba(255,196,62,0.85)" />
-                        <stop offset="100%" stop-color="rgba(255,96,58,0.72)" />
-                      </linearGradient>
-                      <filter id="contourGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="0" stdDeviation="2.8" flood-color="#78d8ff" flood-opacity="0.52" />
-                      </filter>
-                    </defs>
-                    <rect x="0" y="0" width="740" height="430" rx="22" fill="url(#bgPanel)" />
-                    <rect x="312" y="66" width="116" height="298" rx="9" fill="rgba(255,152,196,0.12)" stroke="rgba(255,182,220,0.76)" />
-                    <path d="M344,82 C324,116 324,144 344,172 C365,200 365,230 344,258 C324,286 324,314 344,350 L396,350 C416,314 416,286 396,258 C375,230 375,200 396,172 C416,144 416,116 396,82 Z"
-                      fill="url(#aerialFill)" opacity="0.86" />
-                    <path class="contour-line contour-main" d="M332,74 C303,108 303,151 332,186 C361,221 361,259 332,294 C303,329 303,359 332,372 L408,372 C437,359 437,329 408,294 C379,259 379,221 408,186 C437,151 437,108 408,74 Z" />
-                    <path class="contour-line contour-alt" d="M322,68 C288,105 288,153 322,192 C356,231 356,258 322,295 C288,332 288,366 322,380 L418,380 C452,366 452,332 418,295 C384,258 384,231 418,192 C452,153 452,105 418,68 Z" />
-                    <path class="contour-line contour-fade" d="M314,63 C275,102 275,158 314,199 C353,240 353,258 314,298 C275,338 275,370 314,388 L426,388 C465,370 465,338 426,298 C387,258 387,240 426,199 C465,158 465,102 426,63 Z" />
-                    <g class="sweep-probe">
-                      <line x1="290" y1="236" x2="450" y2="236" />
-                      <circle cx="290" cy="236" r="4.4" />
-                      <circle cx="450" cy="236" r="4.4" />
-                      <text x="370" y="224" text-anchor="middle">Sweep CD 82.1 nm</text>
-                    </g>
-                  </svg>
-
-                  <div class="sim-status">Sweep mode | dose 0.42 | 9 points | CD stable</div>
-                </div>
-              </div>
-            </div>
+        <figure class="hero-visual" aria-label="Contact print target preview">
+          <div class="hero-panel">
+            <svg viewBox="0 0 520 320" role="img" aria-label="Target and printed contour preview">
+              <defs>
+                <linearGradient id="heroBg" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#0f1f37" />
+                  <stop offset="100%" stop-color="#091322" />
+                </linearGradient>
+                <radialGradient id="heroAerial" cx="50%" cy="50%" r="52%">
+                  <stop offset="0%" stop-color="rgba(255,226,131,0.95)" />
+                  <stop offset="100%" stop-color="rgba(255,141,84,0.15)" />
+                </radialGradient>
+              </defs>
+              <rect x="0" y="0" width="520" height="320" rx="26" fill="url(#heroBg)" />
+              <rect x="192" y="92" width="136" height="136" rx="14" fill="none" stroke="rgba(151,197,255,0.85)" stroke-dasharray="6 6" stroke-width="2.2" />
+              <circle cx="260" cy="160" r="76" fill="url(#heroAerial)" />
+              <path d="M194,88 C176,112 176,208 194,232 C218,250 302,250 326,232 C344,208 344,112 326,88 C302,70 218,70 194,88 Z" fill="none" stroke="rgba(255,244,219,0.96)" stroke-width="2.4" />
+            </svg>
+            <div class="hero-panel-note">Target square vs printed contour</div>
           </div>
         </figure>
       </section>
 
-      <section class="opclab-band" id="opclab" data-reveal>
-        <p class="eyebrow invert">What is OPC?</p>
-        <h2>OPC (Optical Proximity Correction) pre-distorts mask geometry so the wafer print lands on target.</h2>
+      <section class="why-card" id="why-opc" data-reveal>
+        <h2>Why OPC matters?</h2>
         <p>
-          In advanced semiconductor manufacturing, OPC directly impacts CD control, yield, and process window margin.
+          In semiconductor industry photolithography, light diffraction and scattering distort tiny mask shapes, so the printed pattern can miss transistor targets.
+          OPC pre-corrects the mask so wafer prints land on target dimensions for better yield and performance.
         </p>
       </section>
 
-      <section class="showcase" id="showcase">
-        <article class="feature-card" data-reveal>
-          <div class="feature-copy">
-            <h3>Sweep Studio</h3>
-            <p>Scan dose and geometry windows quickly, then inspect contour movement in one timeline.</p>
-          </div>
-          <div class="feature-media sweep-media" aria-hidden="true">
-            <svg viewBox="0 0 420 240">
-              <rect x="20" y="18" width="380" height="204" rx="16" />
-              <path class="axis" d="M58 196 L360 196 M58 40 L58 196" />
-              <path class="trend main" d="M66 174 C116 160,144 148,182 126 C220 103,250 98,288 88 C322 80,340 70,356 58" />
-              <path class="trend ghost" d="M66 180 C110 170,150 160,184 140 C216 122,246 114,290 104 C326 96,344 88,356 76" />
-              <circle class="probe" cx="252" cy="97" r="7" />
-            </svg>
-          </div>
-        </article>
+      <section class="physics-card" data-reveal>
+        <div class="physics-copy">
+          <h3>Why a simple square contact can print wrong</h3>
+          <p>
+            Even with a square opening on the mask, optical diffraction and scattering blur the aerial image, so corners round off and the print shifts from the intended target.
+          </p>
+        </div>
+        <figure class="physics-figure" aria-label="Diffraction and scattering schematic">
+          <svg viewBox="0 0 800 220" role="img" aria-label="Mask to optics to wafer print schematic">
+            <defs>
+              <linearGradient id="pbg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f3f8ff" />
+                <stop offset="100%" stop-color="#e7effb" />
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="800" height="220" rx="18" fill="url(#pbg)" />
+            <rect x="30" y="44" width="190" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
+            <text x="125" y="70" text-anchor="middle">Mask (Square Contact)</text>
+            <rect x="98" y="92" width="54" height="54" fill="rgba(255,132,189,0.26)" stroke="rgba(206,82,140,0.78)" stroke-width="2" />
 
-        <article class="feature-card" data-reveal>
-          <div class="feature-copy">
-            <h3>A/B Comparison</h3>
-            <p>Place two mask strategies on one frame and choose the better process target with measurable delta.</p>
-          </div>
-          <div class="feature-media compare-media" aria-hidden="true">
-            <svg viewBox="0 0 420 240">
-              <rect x="22" y="20" width="376" height="200" rx="16" />
-              <path class="mask-frame" d="M176 36 H246 V204 H176 Z" />
-              <path class="ab-line a" d="M166 46 C146 76,146 112,166 142 C186 172,186 186,166 212 H256 C276 186,276 172,256 142 C236 112,236 76,256 46 Z" />
-              <path class="ab-line b" d="M156 38 C132 74,132 116,156 150 C180 184,180 192,156 218 H266 C290 192,290 184,266 150 C242 116,242 74,266 38 Z" />
-            </svg>
-          </div>
-        </article>
+            <rect x="300" y="44" width="190" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
+            <text x="395" y="70" text-anchor="middle">Optics</text>
+            <path d="M326 140 C346 118,368 118,388 140 C408 162,430 162,450 140" fill="none" stroke="rgba(38,95,214,0.92)" stroke-width="2.2" />
+            <path d="M326 116 C346 94,368 94,388 116 C408 138,430 138,450 116" fill="none" stroke="rgba(38,95,214,0.52)" stroke-width="2.2" />
+            <text x="395" y="164" text-anchor="middle">Diffraction + Scattering</text>
 
-        <article class="feature-card" data-reveal>
-          <div class="feature-copy">
-            <h3>2D + 3D Panels</h3>
-            <p>Read contour behavior in 2D and depth context in 3D, synchronized from one input state.</p>
-          </div>
-          <div class="feature-media panel-media" aria-hidden="true">
-            <div class="panel-stack">
-              <div class="panel-tile two-d"></div>
-              <div class="panel-tile three-d"></div>
+            <rect x="570" y="44" width="200" height="132" rx="12" fill="white" stroke="rgba(20,42,72,0.2)" />
+            <text x="670" y="70" text-anchor="middle">Wafer Print</text>
+            <rect x="629" y="92" width="82" height="82" fill="none" stroke="rgba(109,140,185,0.7)" stroke-dasharray="5 5" stroke-width="2" />
+            <path d="M634,96 C616,114 616,152 634,170 C652,188 688,188 706,170 C724,152 724,114 706,96 C688,78 652,78 634,96 Z" fill="rgba(255,169,86,0.28)" stroke="rgba(228,120,41,0.92)" stroke-width="2.2" />
+
+            <path d="M235 110 L284 110" stroke="rgba(36,62,96,0.75)" stroke-width="2.4" marker-end="url(#arrow)" />
+            <path d="M505 110 L554 110" stroke="rgba(36,62,96,0.75)" stroke-width="2.4" marker-end="url(#arrow)" />
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="rgba(36,62,96,0.75)" />
+              </marker>
+            </defs>
+          </svg>
+        </figure>
+      </section>
+
+      <section class="example-section" id="contact-example" data-reveal>
+        <div class="section-head">
+          <h2>Practical Contact Example</h2>
+          <p>Simulator templates: Contact Raw (non-OPC) vs Contact Serif (OPC).</p>
+        </div>
+
+        <div class="example-grid">
+          <article class="example-card bad">
+            <div class="example-top">
+              <h3>Contact Raw (non-OPC)</h3>
+              <span class="status-badge bad">Not hitting target</span>
             </div>
-          </div>
-        </article>
+            <svg viewBox="0 0 460 320" role="img" aria-label="Contact Raw not hitting square target">
+              <rect x="0" y="0" width="460" height="320" rx="22" fill="#0f1b2f" />
+              <text x="230" y="32" text-anchor="middle" fill="rgba(224,236,255,0.92)">Target vs Printed</text>
+              <rect x="160" y="92" width="140" height="140" rx="12" fill="none" stroke="rgba(132,183,255,0.95)" stroke-dasharray="6 6" stroke-width="2.4" />
+              <path d="M165,99 C143,121 143,203 165,225 C187,247 273,247 295,225 C317,203 317,121 295,99 C273,77 187,77 165,99 Z" fill="rgba(255,143,143,0.2)" stroke="rgba(255,132,132,0.95)" stroke-width="2.4" />
+              <text x="230" y="270" text-anchor="middle" fill="rgba(255,196,196,0.96)">No good: rounded print misses square target</text>
+            </svg>
+          </article>
+
+          <article class="example-card good">
+            <div class="example-top">
+              <h3>Contact Serif (OPC)</h3>
+              <span class="status-badge good">Hitting target</span>
+            </div>
+            <svg viewBox="0 0 460 320" role="img" aria-label="Contact Serif hitting square target">
+              <rect x="0" y="0" width="460" height="320" rx="22" fill="#0f1b2f" />
+              <text x="230" y="32" text-anchor="middle" fill="rgba(224,236,255,0.92)">Target vs Printed</text>
+              <rect x="160" y="92" width="140" height="140" rx="12" fill="none" stroke="rgba(132,183,255,0.95)" stroke-dasharray="6 6" stroke-width="2.4" />
+              <rect x="166" y="98" width="128" height="128" rx="11" fill="rgba(120,233,174,0.2)" stroke="rgba(105,233,162,0.96)" stroke-width="2.4" />
+              <g fill="rgba(255,168,212,0.3)" stroke="rgba(255,157,207,0.9)" stroke-width="1.7">
+                <rect x="152" y="84" width="20" height="20" />
+                <rect x="288" y="84" width="20" height="20" />
+                <rect x="152" y="220" width="20" height="20" />
+                <rect x="288" y="220" width="20" height="20" />
+              </g>
+              <text x="230" y="270" text-anchor="middle" fill="rgba(187,255,217,0.96)">Good: OPC serif keeps print on target</text>
+            </svg>
+          </article>
+        </div>
       </section>
 
       <section class="cta-band" data-reveal>
-        <h2>Build process intuition before expensive fab iterations.</h2>
-        <p>Open the simulator and run your first sweep in under a minute.</p>
+        <h2>Now run it in the simulator.</h2>
+        <p>Try Contact Raw and Contact Serif directly, then sweep dose and compare.</p>
         <a class="btn btn-primary btn-large" data-launch href="#" target="_blank" rel="noopener noreferrer">Launch Simulator</a>
       </section>
     </main>
@@ -164,3 +170,4 @@
     <script src="./site.js"></script>
   </body>
 </html>
+

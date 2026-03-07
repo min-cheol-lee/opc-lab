@@ -81,15 +81,15 @@ export default function TrustDashboardPage() {
   return (
     <main style={{ maxWidth: 1120, margin: "0 auto", padding: "28px 22px 44px", lineHeight: 1.55 }}>
       <header style={{ display: "grid", gap: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>OPC Lab Trust Dashboard</h1>
+        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>litopc Trust Dashboard</h1>
         <p style={{ margin: 0, opacity: 0.78 }}>
           Benchmark pass-rate trend by model version. Dates shown below are absolute UTC timestamps.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/opclab">Back to Lab</a>
-          <a className="model-guide-link" href="/opclab/benchmark-gallery">Benchmark Gallery</a>
-          <a className="model-guide-link" href="/opclab/model-change-log">Model Change Log</a>
-          <a className="model-guide-link" href="/opclab/revenue-dashboard">Revenue Dashboard</a>
+          <a className="model-guide-link" href="/litopc">Back to Lab</a>
+          <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
+          <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
+          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
         </div>
       </header>
 

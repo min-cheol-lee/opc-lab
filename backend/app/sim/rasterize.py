@@ -59,9 +59,20 @@ def rasterize_shapes(shapes: List[Shape], grid: int, nm_per_pixel: float) -> np.
     mask[y, x] in [0,1]
     """
     mask = np.zeros((grid, grid), dtype=np.float32)
-    for s in shapes:
+    add_shapes = [s for s in shapes if getattr(s, "op", "add") != "subtract"]
+    subtract_shapes = [s for s in shapes if getattr(s, "op", "add") == "subtract"]
+
+    for s in add_shapes:
         if getattr(s, "type", "rect") == "rect":
             _rasterize_rect(mask, s, grid=grid, nm_per_pixel=nm_per_pixel)
         elif getattr(s, "type", "") == "polygon":
             _rasterize_polygon(mask, s.points_nm, grid=grid, nm_per_pixel=nm_per_pixel)
+
+    for s in subtract_shapes:
+        cutter = np.zeros((grid, grid), dtype=np.float32)
+        if getattr(s, "type", "rect") == "rect":
+            _rasterize_rect(cutter, s, grid=grid, nm_per_pixel=nm_per_pixel)
+        elif getattr(s, "type", "") == "polygon":
+            _rasterize_polygon(cutter, s.points_nm, grid=grid, nm_per_pixel=nm_per_pixel)
+        mask[cutter > 0.5] = 0.0
     return mask

@@ -4,17 +4,17 @@ export default function BenchmarkGalleryPage() {
   return (
     <main style={{ maxWidth: 1080, margin: "0 auto", padding: "28px 22px 44px", lineHeight: 1.55 }}>
       <header style={{ display: "grid", gap: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>OPC Lab Benchmark Gallery</h1>
+        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>litopc Benchmark Gallery</h1>
         <p style={{ margin: 0, opacity: 0.78 }}>
           Public benchmark set for reproducible behavior checks. This is an educational validation board, not sign-off qualification.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/opclab/advanced-analytics">Advanced Analytics</a>
-          <a className="model-guide-link" href="/opclab/model-summary">Model Guide</a>
-          <a className="model-guide-link" href="/opclab/model-change-log">Model Change Log</a>
-          <a className="model-guide-link" href="/opclab/trust-dashboard">Trust Dashboard</a>
-          <a className="model-guide-link" href="/opclab/revenue-dashboard">Revenue Dashboard</a>
-          <a className="model-guide-link" href="/opclab">Back to Lab</a>
+          <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+          <a className="model-guide-link" href="/litopc/model-summary">Model Guide</a>
+          <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
+          <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
+          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
+          <a className="model-guide-link" href="/litopc">Back to Lab</a>
         </div>
       </header>
 

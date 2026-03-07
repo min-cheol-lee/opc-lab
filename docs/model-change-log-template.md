@@ -1,4 +1,4 @@
-# OPC Lab Model Change Log Template
+# litopc Model Change Log Template
 
 Date: 2026-02-25  
 Purpose: standardize model-impact communication for Phase 2B trust operations.
@@ -30,7 +30,7 @@ Purpose: standardize model-impact communication for Phase 2B trust operations.
 
 ### Links
 - Benchmark artifact: `backend/trust/artifacts/benchmark-run-*.json`
-- Dashboard page: `/opclab/trust-dashboard`
+- Dashboard page: `/litopc/trust-dashboard`
 - Related PR/commit:
 
 ## Publishing Rule

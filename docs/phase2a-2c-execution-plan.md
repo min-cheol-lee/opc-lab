@@ -35,7 +35,7 @@ Status: Active planning baseline
 - 2A-02: Done (entitlement middleware, `/entitlements`, policy audit log + `/policy/audit`).
 - 2A-03: Done (frontend usage meter and quota block UX in run/sweep/export paths).
 - 2A-04: Done (event taxonomy + emitters + browser queue + backend ingest endpoint).
-- 2A-05: Baseline done (`/events/summary` API + `/opclab/revenue-dashboard`).
+- 2A-05: Baseline done (`/events/summary` API + `/litopc/revenue-dashboard`).
 
 ### KPIs
 - Visitor -> upgrade click rate >= 8%.
@@ -66,7 +66,7 @@ Status: Active planning baseline
 - 2B-01: Done (`backend/trust/benchmark-suite.v1.json` + gallery expanded to 10 fixed cases).
 - 2B-02: Done (`backend/scripts/run_benchmark_suite.py` + artifact outputs under `backend/trust/artifacts`).
 - 2B-03: Done (`docs/model-change-log-template.md` + `docs/phase2b-release-checklist.md` integrated).
-- 2B-04: Done (`/trust/benchmarks/trend` API + `/opclab/trust-dashboard` page).
+- 2B-04: Done (`/trust/benchmarks/trend` API + `/litopc/trust-dashboard` page).
 
 ### KPIs
 - Benchmark cases with explicit expected behavior >= 10.

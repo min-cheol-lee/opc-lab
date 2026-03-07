@@ -55,7 +55,7 @@ def make_request(path: str, method: str = "POST", headers: dict[str, str] | None
 
     return Request(scope, receive)
 
-request_headers = {"x-opclab-client-id": "smoke-hardening-cli"}
+request_headers = {"x-litopc-client-id": "smoke-hardening-cli"}
 
 base = SimRequest(
     plan="FREE",

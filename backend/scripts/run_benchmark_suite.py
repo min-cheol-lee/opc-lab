@@ -13,7 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.main import app as opclab_app  # noqa: E402
+from app.main import app as litopc_app  # noqa: E402
 from app.main import simulate, simulate_batch  # noqa: E402
 from app.models import BatchSimRequest, MaskSpec, SimRequest  # noqa: E402
 
@@ -35,7 +35,7 @@ def make_request(path: str, method: str = "POST") -> Request:
         "path": path,
         "raw_path": path.encode("latin-1"),
         "query_string": b"",
-        "headers": [(b"x-opclab-client-id", RUNNER_CLIENT_ID.encode("latin-1"))],
+        "headers": [(b"x-litopc-client-id", RUNNER_CLIENT_ID.encode("latin-1"))],
         "client": ("127.0.0.1", 0),
         "server": ("localhost", 8000),
     }
@@ -190,9 +190,9 @@ def case_contact_serif_monotonic_duv_dry() -> tuple[list[dict[str, object]], dic
 
 def case_staircase_dose_monotonic_duv_dry() -> tuple[list[dict[str, object]], dict[str, object]]:
     base = build_base_request(
-        preset_id="DUV_193_DRY",
+        preset_id="EUV_LNA",
         template_id="STAIRCASE",
-        params_nm={"fov_nm": 1100, "step_w_nm": 40, "step_h_nm": 40, "n_steps": 12, "thickness_nm": 100, "sraf_on": 0},
+        params_nm={"fov_nm": 1100, "step_w_nm": 180, "step_h_nm": 110, "thickness_nm": 88, "sraf_on": 0},
         dose=0.3,
     )
     out = simulate_batch(
@@ -385,7 +385,7 @@ def main() -> int:
     suite_version, case_meta = load_suite_meta()
     now = datetime.now(timezone.utc)
     run_id = f"bench-{now.strftime('%Y%m%dT%H%M%SZ')}"
-    model_version = opclab_app.version or MODEL_VERSION
+    model_version = litopc_app.version or MODEL_VERSION
     results: list[dict[str, object]] = []
 
     for case_id, fn in CASE_FUNCS.items():

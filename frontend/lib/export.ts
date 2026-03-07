@@ -1,4 +1,4 @@
-﻿import type { BatchSimResponse, RunRecord, SimRequest, SimResponse } from "./types";
+import type { BatchSimResponse, RunRecord, SimRequest, SimResponse } from "./types";
 
 const EXPORT_FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
@@ -245,7 +245,7 @@ function attachExportMetaOverlay(svg: SVGSVGElement, req: SimRequest, sim: SimRe
   title.setAttribute("fill", "rgba(236,244,255,0.96)");
   title.setAttribute("font-size", Math.max(12, vbW * 0.013).toFixed(2));
   title.setAttribute("font-weight", "620");
-  title.textContent = `OPC Lab Export · ${nowHuman()}`;
+  title.textContent = `litopc Export · ${nowHuman()}`;
   g.appendChild(title);
 
   const sub = document.createElementNS(ns, "text");
@@ -271,7 +271,7 @@ function attachExportMetaOverlay(svg: SVGSVGElement, req: SimRequest, sim: SimRe
     wm.setAttribute("font-size", Math.max(10, vbW * 0.009).toFixed(2));
     wm.setAttribute("font-weight", "600");
     wm.setAttribute("text-anchor", "end");
-    wm.textContent = "OPC Lab Free";
+    wm.textContent = "litopc Free";
     g.appendChild(wm);
   }
 
@@ -514,7 +514,7 @@ function prepareSvgForExport(
 
   attachExportStyle(clone);
   const desc = document.createElementNS("http://www.w3.org/2000/svg", "desc");
-  desc.textContent = `OPC Lab Export | ${compactMeta(req, sim, opts?.view)}`;
+  desc.textContent = `litopc Export | ${compactMeta(req, sim, opts?.view)}`;
   clone.insertBefore(desc, clone.firstChild);
   attachExportBackdrop(clone, vbW, vbH);
   if (opts?.includeMetaOverlay ?? true) {
@@ -546,7 +546,7 @@ function wrapTextByWidth(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
 
 export function buildExportBaseName(req: SimRequest): string {
   const mode = req.mask.mode === "CUSTOM" ? "CUSTOM" : req.mask.template_id ?? "TEMPLATE";
-  return safeToken(`opc-lab_${req.preset_id}_${mode}_${req.plan}_${nowStamp()}`);
+  return safeToken(`litopc_${req.preset_id}_${mode}_${req.plan}_${nowStamp()}`);
 }
 
 export function buildMetaLines(req: SimRequest, sim: SimResponse | null): string[] {
@@ -596,7 +596,7 @@ export async function exportPngWithMeta(svgEl: SVGSVGElement, req: SimRequest, s
   ctx.fillStyle = "rgba(236,244,255,0.96)";
   ctx.font = `600 ${Math.round(footerH * 0.24)}px ${EXPORT_FONT}`;
   ctx.textBaseline = "top";
-  ctx.fillText("OPC Lab Export", Math.round(width * 0.02), height + Math.round(footerH * 0.13));
+  ctx.fillText("litopc Export", Math.round(width * 0.02), height + Math.round(footerH * 0.13));
 
   const detail = compactMeta(req, sim, view);
   ctx.fillStyle = "rgba(202,220,248,0.92)";
@@ -618,7 +618,7 @@ export async function exportPngWithMeta(svgEl: SVGSVGElement, req: SimRequest, s
   if (req.plan === "FREE") {
     ctx.fillStyle = "rgba(255,255,255,0.86)";
     ctx.font = `600 ${Math.round(footerH * 0.18)}px ${EXPORT_FONT}`;
-    const wm = "OPC Lab Free";
+    const wm = "litopc Free";
     const wmW = ctx.measureText(wm).width;
     ctx.fillText(wm, width - wmW - Math.round(width * 0.02), height + Math.round(footerH * 0.13));
   }
@@ -674,7 +674,7 @@ export function exportRunsCsv(runs: RunRecord[]) {
     lines.push(row.map(csvCell).join(","));
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  downloadBlob(blob, `opc-lab_runs_${nowStamp()}.csv`);
+  downloadBlob(blob, `litopc_runs_${nowStamp()}.csv`);
 }
 
 export function exportSweepCsv(
@@ -719,7 +719,7 @@ export function exportSweepCsv(
     lines.push(row.map(csvCell).join(","));
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  downloadBlob(blob, `opc-lab_sweep_${safeToken(main.param)}_${nowStamp()}.csv`);
+  downloadBlob(blob, `litopc_sweep_${safeToken(main.param)}_${nowStamp()}.csv`);
 }
 
 

@@ -1,5 +1,5 @@
 (function () {
-  var config = window.OPCLAB_SITE_CONFIG || {};
+  var config = window.LITOPC_SITE_CONFIG || {};
   var simulatorUrl = (config.simulatorUrl || "").trim();
   var launchLinks = document.querySelectorAll("[data-launch]");
   var revealTargets = document.querySelectorAll("[data-reveal]");
@@ -37,7 +37,7 @@
     {
       threshold: 0.16,
       rootMargin: "0px 0px -8% 0px",
-    },
+    }
   );
 
   for (var m = 0; m < revealTargets.length; m++) {

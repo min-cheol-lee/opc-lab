@@ -23,6 +23,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Runtime / local data
+backend/litopc.db
+# Legacy local DB name kept ignored during the rename migration.
 backend/opclab.db
 backend/trust/artifacts/
 

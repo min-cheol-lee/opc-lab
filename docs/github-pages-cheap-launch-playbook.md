@@ -3,7 +3,7 @@
 Date: 2026-02-25
 
 ## Goal
-- Publish an `opc-lab` branded landing page at near-zero initial cost.
+- Publish an `litopc` branded landing page at near-zero initial cost.
 - Route traffic from the landing page to the real simulator app and start monetization experiments.
 
 ## What is already prepared in this repository
@@ -18,7 +18,7 @@ Date: 2026-02-25
 ## 1) First required change
 1. Update `marketing-pages/site-config.js`:
    - `simulatorUrl`
-   - Example: `https://app.opclab-sim.com/opclab`
+   - Example: `https://app.litopc-sim.com/litopc`
 
 ## 2) Enable GitHub Pages
 1. Open the GitHub repository.
@@ -30,15 +30,15 @@ Date: 2026-02-25
    - Default: `https://<username>.github.io/<repo>/`
    - If repo name is `<username>.github.io`: `https://<username>.github.io/`
 
-## 3) Attach an opc-lab custom domain
+## 3) Attach an litopc custom domain
 If no domain is purchased yet:
 - Start with the default GitHub URL (zero domain cost).
 
 If a domain is already purchased:
 1. Decide the landing address:
-   - Recommended: `www.opclab-sim.com`
+   - Recommended: `www.litopc-sim.com`
 2. Create `marketing-pages/CNAME` with one line:
-   - `www.opclab-sim.com`
+   - `www.litopc-sim.com`
 3. In GitHub `Settings` -> `Pages`, set the same custom domain.
 4. Configure DNS:
    - `www` -> `CNAME` -> `<username>.github.io`

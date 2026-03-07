@@ -3,17 +3,17 @@ import type { CSSProperties } from "react";
 export default function ModelSummaryPage() {
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: "28px 22px 44px", lineHeight: 1.6 }}>
-      <h1 style={{ margin: 0, fontSize: 36, letterSpacing: "-0.02em" }}>OPC Lab Imaging & Limits Guide</h1>
+      <h1 style={{ margin: 0, fontSize: 36, letterSpacing: "-0.02em" }}>litopc Imaging & Limits Guide</h1>
       <p style={{ marginTop: 10, opacity: 0.78 }}>
         Educational approximation only. Not calibrated for manufacturing sign-off.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-        <a className="model-guide-link" href="/opclab/advanced-analytics">Advanced Analytics</a>
-        <a className="model-guide-link" href="/opclab/benchmark-gallery">Benchmark Gallery</a>
-        <a className="model-guide-link" href="/opclab/model-change-log">Model Change Log</a>
-        <a className="model-guide-link" href="/opclab/trust-dashboard">Trust Dashboard</a>
-        <a className="model-guide-link" href="/opclab/revenue-dashboard">Revenue Dashboard</a>
-        <a className="model-guide-link" href="/opclab">Back to Lab</a>
+        <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+        <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
+        <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
+        <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
+        <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
+        <a className="model-guide-link" href="/litopc">Back to Lab</a>
       </div>
 
       <section style={{ marginTop: 28 }}>
@@ -85,25 +85,25 @@ export default function ModelSummaryPage() {
           </thead>
           <tbody>
             <tr>
-              <td style={tdStyle}>DUV 193 Dry</td>
+              <td style={tdStyle}>DUV | 193 nm Dry</td>
               <td style={tdStyle}>NA 0.93</td>
               <td style={tdStyle}>0.28</td>
               <td style={tdStyle}>~58 nm</td>
             </tr>
             <tr>
-              <td style={tdStyle}>DUV 193 Immersion</td>
+              <td style={tdStyle}>DUV | 193 nm Immersion</td>
               <td style={tdStyle}>NA 1.35</td>
               <td style={tdStyle}>0.26</td>
               <td style={tdStyle}>~37 nm</td>
             </tr>
             <tr>
-              <td style={tdStyle}>EUV Low-NA</td>
+              <td style={tdStyle}>EUV | 13.5 nm Low-NA</td>
               <td style={tdStyle}>13.5 nm, NA 0.33</td>
               <td style={tdStyle}>0.30</td>
               <td style={tdStyle}>~12.3 nm</td>
             </tr>
             <tr>
-              <td style={tdStyle}>EUV High-NA</td>
+              <td style={tdStyle}>EUV | 13.5 nm High-NA</td>
               <td style={tdStyle}>13.5 nm, NA 0.55</td>
               <td style={tdStyle}>0.26</td>
               <td style={tdStyle}>~6.4 nm</td>

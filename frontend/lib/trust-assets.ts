@@ -54,10 +54,10 @@ export const BENCHMARK_GALLERY: BenchmarkCase[] = [
   },
   {
     id: "bk-contact-width-monotonic-duv-dry",
-    title: "Contact Width Monotonicity (DUV Dry)",
-    intent: "Larger contact mask width should not reduce printed CD under fixed process settings.",
+    title: "Square Width Monotonicity (DUV Dry)",
+    intent: "Larger square mask width should not reduce printed CD under fixed process settings.",
     preset: "DUV_193_DRY",
-    mask: "CONTACT_RAW (w sweep)",
+    mask: "Square / CONTACT_RAW (w sweep)",
     setup: "Width sweep 120 -> 180, step 20, dose=0.40",
     expected: [
       "All sampled width points print valid contour.",
@@ -69,10 +69,10 @@ export const BENCHMARK_GALLERY: BenchmarkCase[] = [
   },
   {
     id: "bk-contact-serif-monotonic-duv-dry",
-    title: "Contact Serif Response (DUV Dry)",
-    intent: "Increasing serif size should increase effective printed CD for contact OPC Serif mask.",
+    title: "Square OPC Serif Response (DUV Dry)",
+    intent: "Increasing serif size should increase effective printed CD for the Square OPC mask.",
     preset: "DUV_193_DRY",
-    mask: "CONTACT_OPC_SERIF (w=120, serif sweep)",
+    mask: "Square OPC / CONTACT_OPC_SERIF (w=120, serif sweep)",
     setup: "Serif sweep 0 -> 60, representative samples",
     expected: [
       "Baseline without serif is printable.",
@@ -84,10 +84,10 @@ export const BENCHMARK_GALLERY: BenchmarkCase[] = [
   },
   {
     id: "bk-staircase-dose-monotonic-duv-dry",
-    title: "Staircase Dose Monotonicity (DUV Dry)",
-    intent: "Staircase template should preserve monotonic CD shrink with increasing dose threshold.",
-    preset: "DUV_193_DRY",
-    mask: "STAIRCASE (thickness=100)",
+    title: "Stepped Interconnect Dose Monotonicity (EUV Low-NA)",
+    intent: "The stepped interconnect template should preserve monotonic CD shrink with increasing dose threshold.",
+    preset: "EUV_LNA",
+    mask: "Stepped Interconnect / STAIRCASE (thickness=88)",
     setup: "Dose sweep 0.30 -> 0.60, step 0.10",
     expected: [
       "All sampled points print valid contour.",
@@ -114,10 +114,10 @@ export const BENCHMARK_GALLERY: BenchmarkCase[] = [
   },
   {
     id: "bk-euv-contact-dose-stability",
-    title: "EUV Contact Dose Stability",
-    intent: "EUV contact should remain printable across moderate dose sweep with smooth CD trend.",
+    title: "EUV Square Dose Stability",
+    intent: "EUV square should remain printable across moderate dose sweep with smooth CD trend.",
     preset: "EUV_LNA",
-    mask: "CONTACT_RAW (w=120)",
+    mask: "Square / CONTACT_RAW (w=120)",
     setup: "Dose sweep 0.30 -> 0.60, step 0.10",
     expected: [
       "All sampled points print valid contour.",

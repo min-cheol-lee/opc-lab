@@ -23,6 +23,14 @@ class AuthIdentity:
     authenticated: bool
 
 
+def _header_first(request: Request, *names: str) -> str | None:
+    for name in names:
+        value = request.headers.get(name)
+        if value:
+            return value
+    return None
+
+
 def _b64url_decode(segment: str) -> bytes:
     pad = "=" * (-len(segment) % 4)
     return base64.urlsafe_b64decode(segment + pad)
@@ -80,7 +88,7 @@ def resolve_auth_identity(request: Request) -> AuthIdentity:
         payload = _decode_payload(token)
         raw_sub = payload.get("sub")
         raw_email = payload.get("email")
-        header_email = request.headers.get("x-opclab-email")
+        header_email = _header_first(request, "x-litopc-email", "x-opclab-email")
         subject = sanitize_user_id(str(raw_sub)) if raw_sub is not None else ""
         email = str(raw_email) if isinstance(raw_email, str) else (header_email.strip() if header_email else None)
         if subject:
@@ -93,8 +101,8 @@ def resolve_auth_identity(request: Request) -> AuthIdentity:
         raise HTTPException(status_code=401, detail="Bearer token missing subject.")
 
     if allow_header_user:
-        header_user = sanitize_user_id(request.headers.get("x-opclab-user-id"))
-        header_email = request.headers.get("x-opclab-email")
+        header_user = sanitize_user_id(_header_first(request, "x-litopc-user-id", "x-opclab-user-id"))
+        header_email = _header_first(request, "x-litopc-email", "x-opclab-email")
         if header_user:
             return AuthIdentity(
                 user_id=f"hdr:{header_user}",
@@ -103,7 +111,7 @@ def resolve_auth_identity(request: Request) -> AuthIdentity:
                 authenticated=False,
             )
 
-    client_id = sanitize_user_id(request.headers.get("x-opclab-client-id"))
+    client_id = sanitize_user_id(_header_first(request, "x-litopc-client-id", "x-opclab-client-id"))
     if client_id:
         return AuthIdentity(
             user_id=f"cid:{client_id}",

@@ -1,31 +1,32 @@
 from ..models import Preset
 
-# 공개 정보 기반 “Educational preset”
+# Educational presets. These are intended for explanation and relative behavior,
+# not sign-off calibration.
 PRESETS = {
     "DUV_193_DRY": Preset(
         preset_id="DUV_193_DRY",
-        title="DUV 193nm Dry (Educational)",
-        description="Baseline DUV dry preset for visualization.",
+        title="DUV | 193 nm Dry",
+        description="Baseline 193 nm dry educational preset.",
         wavelength_nm=193.0,
-        na=0.93,          # educational typical value (not calibrated)
+        na=0.93,
         sigma=0.7,
         is_immersion=False,
         blur_sensitivity=1.0,
     ),
     "DUV_193_IMM": Preset(
         preset_id="DUV_193_IMM",
-        title="DUV 193nm Immersion (Pro, Educational)",
-        description="Immersion preset (Pro).",
+        title="DUV | 193 nm Immersion",
+        description="Higher-NA 193 nm immersion educational preset.",
         wavelength_nm=193.0,
-        na=1.35,          # educational typical value (not calibrated)
+        na=1.35,
         sigma=0.7,
         is_immersion=True,
         blur_sensitivity=1.0,
     ),
     "EUV_LNA": Preset(
         preset_id="EUV_LNA",
-        title="EUV 13.5nm Low-NA 0.33 (Educational)",
-        description="Low-NA EUV preset (Free).",
+        title="EUV | 13.5 nm Low-NA",
+        description="Low-NA EUV educational preset.",
         wavelength_nm=13.5,
         na=0.33,
         sigma=0.7,
@@ -34,8 +35,8 @@ PRESETS = {
     ),
     "EUV_HNA": Preset(
         preset_id="EUV_HNA",
-        title="EUV 13.5nm High-NA 0.55 (Pro, Educational)",
-        description="High-NA EUV preset (Pro). More focus-sensitive in this educational model.",
+        title="EUV | 13.5 nm High-NA",
+        description="High-NA EUV educational preset with stronger focus sensitivity.",
         wavelength_nm=13.5,
         na=0.55,
         sigma=0.7,

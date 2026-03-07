@@ -1,5 +1,5 @@
 {
-  "suite_version": "2026-02-25",
+  "suite_version": "2026-03-02",
   "description": "Phase 2B reproducible benchmark suite for educational OPC behavior validation.",
   "cases": [
     {
@@ -14,18 +14,18 @@
     },
     {
       "id": "bk-contact-width-monotonic-duv-dry",
-      "title": "Contact Width Monotonicity (DUV Dry)",
-      "intent": "Increasing contact width should not reduce printed CD."
+      "title": "Square Width Monotonicity (DUV Dry)",
+      "intent": "Increasing square width should not reduce printed CD."
     },
     {
       "id": "bk-contact-serif-monotonic-duv-dry",
-      "title": "Contact Serif Response (DUV Dry)",
+      "title": "Square OPC Serif Response (DUV Dry)",
       "intent": "Increasing serif size should increase effective printed CD."
     },
     {
       "id": "bk-staircase-dose-monotonic-duv-dry",
-      "title": "Staircase Dose Monotonicity (DUV Dry)",
-      "intent": "Staircase CD should decrease monotonically as dose increases."
+      "title": "Stepped Interconnect Dose Monotonicity (EUV Low-NA)",
+      "intent": "Stepped interconnect CD should decrease monotonically as dose increases."
     },
     {
       "id": "bk-guard-nonprint-small-iso-duv-dry",
@@ -34,8 +34,8 @@
     },
     {
       "id": "bk-euv-contact-dose-stability",
-      "title": "EUV Contact Dose Stability",
-      "intent": "EUV contact should remain printable over moderate dose sweep."
+      "title": "EUV Square Dose Stability",
+      "intent": "EUV square should remain printable over moderate dose sweep."
     },
     {
       "id": "bk-batch-contract-count",

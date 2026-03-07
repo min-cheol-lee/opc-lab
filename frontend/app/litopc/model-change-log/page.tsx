@@ -4,17 +4,17 @@ export default function ModelChangeLogPage() {
   return (
     <main style={{ maxWidth: 1020, margin: "0 auto", padding: "28px 22px 44px", lineHeight: 1.55 }}>
       <header style={{ display: "grid", gap: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>OPC Lab Model Change Log</h1>
+        <h1 style={{ margin: 0, fontSize: 34, letterSpacing: "-0.02em" }}>litopc Model Change Log</h1>
         <p style={{ margin: 0, opacity: 0.78 }}>
           Transparent record of simulation/model-affecting updates. Dates below are absolute release dates for traceability.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/opclab/advanced-analytics">Advanced Analytics</a>
-          <a className="model-guide-link" href="/opclab/model-summary">Model Guide</a>
-          <a className="model-guide-link" href="/opclab/benchmark-gallery">Benchmark Gallery</a>
-          <a className="model-guide-link" href="/opclab/trust-dashboard">Trust Dashboard</a>
-          <a className="model-guide-link" href="/opclab/revenue-dashboard">Revenue Dashboard</a>
-          <a className="model-guide-link" href="/opclab">Back to Lab</a>
+          <a className="model-guide-link" href="/litopc/advanced-analytics">Advanced Analytics</a>
+          <a className="model-guide-link" href="/litopc/model-summary">Model Guide</a>
+          <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
+          <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
+          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
+          <a className="model-guide-link" href="/litopc">Back to Lab</a>
         </div>
       </header>
 

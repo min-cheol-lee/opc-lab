@@ -1,4 +1,4 @@
-const PROD_API_BASE = "https://opc-lab-production.up.railway.app";
+const PROD_API_BASE = "https://api.litopc.com";
 const LOCAL_API_BASE = "http://localhost:8000";
 
 export function getApiBase(): string {
@@ -7,4 +7,3 @@ export function getApiBase(): string {
   if (process.env.NODE_ENV === "development") return LOCAL_API_BASE;
   return PROD_API_BASE;
 }
-

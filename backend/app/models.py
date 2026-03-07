@@ -27,6 +27,7 @@ TemplateID = Literal[
     "L_CORNER",
     "CONTACT",
     "STAIRCASE",
+    "STAIRCASE_OPC",
     "CONTACT_RAW",
     "CONTACT_OPC_SERIF",
     "LINE_END_RAW",
@@ -36,9 +37,11 @@ TemplateID = Literal[
 ]
 
 ShapeType = Literal["rect", "polygon"]
+ShapeOp = Literal["add", "subtract"]
 
 class RectShape(BaseModel):
     type: Literal["rect"] = "rect"
+    op: ShapeOp = "add"
     x_nm: float  # left
     y_nm: float  # bottom
     w_nm: float
@@ -50,6 +53,7 @@ class PolygonPointNM(BaseModel):
 
 class PolygonShape(BaseModel):
     type: Literal["polygon"] = "polygon"
+    op: ShapeOp = "add"
     points_nm: List[PolygonPointNM] = Field(default_factory=list, min_length=3, max_length=64)
 
 Shape = Union[RectShape, PolygonShape]
@@ -59,6 +63,7 @@ class MaskSpec(BaseModel):
     template_id: Optional[TemplateID] = None
     params_nm: Dict[str, float] = Field(default_factory=dict)
     shapes: List[Shape] = Field(default_factory=list)  # for CUSTOM (Phase 2)
+    target_shapes: List[Shape] = Field(default_factory=list)
 
 class SimRequest(BaseModel):
     plan: Plan = "FREE"

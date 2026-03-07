@@ -9,7 +9,7 @@ Date: 2026-02-25
   - `GET /entitlements/me`
 - Admin manual plan set endpoint:
   - `POST /admin/entitlements/set`
-  - header: `x-opclab-admin-token`
+  - header: `x-litopc-admin-token`
 - Admin invite allowlist endpoints:
   - `POST /admin/invites/set`
   - `GET /admin/invites`
@@ -22,10 +22,10 @@ Date: 2026-02-25
 ## Local staging quick flow
 1. Start backend with admin token:
    - PowerShell:
-     - `$env:OPCLAB_ADMIN_TOKEN = "your-admin-token"`
+     - `$env:LITOPC_ADMIN_TOKEN = "your-admin-token"`
      - `.\dev-backend.ps1`
 2. Open internal login page:
-   - `/opclab/internal-login`
+   - `/litopc/internal-login`
 3. Set acting user id:
    - value example: `tester-alice`
 4. Set tester email (recommended; required in invite-only mode):
@@ -50,7 +50,7 @@ Date: 2026-02-25
 ## Notes
 - If `AUTH_REQUIRED=1` is enabled, requests without valid auth identity are rejected.
 - Until external auth provider is wired, internal testing can use:
-  - `x-opclab-user-id` fallback via localStorage key `opclab_user_id_v1`
-  - `x-opclab-email` fallback via localStorage key `opclab_email_v1`
+  - `x-litopc-user-id` fallback via localStorage key `litopc_user_id_v1`
+  - `x-litopc-email` fallback via localStorage key `litopc_email_v1`
 - End-to-end tester runbook:
   - `docs/internal-tester-onboarding.md`

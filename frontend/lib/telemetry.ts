@@ -2,7 +2,8 @@ import { clientHeaders } from "./usage";
 import { getApiBase } from "./api-base";
 
 const API_BASE = getApiBase();
-const EVENT_QUEUE_KEY = "opclab_event_queue_v1";
+const EVENT_QUEUE_KEY = "litopc_event_queue_v1";
+const LEGACY_EVENT_QUEUE_KEY = "opclab_event_queue_v1";
 const EVENT_FLUSH_DELAY_MS = 1200;
 const EVENT_FLUSH_BATCH = 120;
 const EVENT_FLUSH_THRESHOLD = 24;
@@ -55,7 +56,7 @@ function sanitizePayload(payload?: Record<string, unknown>): Record<string, Even
 function readQueue(): EventRecord[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(EVENT_QUEUE_KEY);
+    const raw = window.localStorage.getItem(EVENT_QUEUE_KEY) ?? window.localStorage.getItem(LEGACY_EVENT_QUEUE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as EventRecord[];
     return Array.isArray(parsed) ? parsed : [];

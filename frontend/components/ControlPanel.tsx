@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type {
   BatchSimResponse,
@@ -6,9 +6,19 @@ import type {
   Plan,
   PresetID,
   RunRecord,
+  SweepGeometryScope,
   SweepParam,
   TemplateID,
 } from "../lib/types";
+import type {
+  CornerAnchor,
+  EditorLayer,
+  EditorTool,
+  EdgeAnchor,
+  SrafOrientation,
+  TargetGuide,
+  TargetScoreMetrics,
+} from "../lib/opc-workspace";
 import type { SavedScenario } from "../lib/scenarios";
 import type { UsageStatus } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
@@ -21,28 +31,55 @@ type CustomMaskPreset = {
   template_id?: TemplateID;
   params_nm: Record<string, number>;
   shapes: Array<MaskShape>;
+  target_shapes?: Array<MaskShape>;
 };
 
 export function ControlPanel(props: {
   plan: Plan; setPlan: (v: Plan) => void;
   maskMode: "TEMPLATE" | "CUSTOM"; setMaskMode: (v: "TEMPLATE" | "CUSTOM") => void;
+  onEnterCustomEditMode: () => void;
+  activeEditLayer: EditorLayer;
+  onSetActiveEditLayer: (v: EditorLayer) => void;
+  editorTool: EditorTool;
+  onSetEditorTool: (v: EditorTool) => void;
   presetId: PresetID; setPresetId: (v: PresetID) => void;
   templateId: TemplateID; setTemplateId: (v: TemplateID) => void;
   templateOptions: Array<{ id: TemplateID; label: string }>;
+  targetGuide: TargetGuide | null;
+  targetMetrics: TargetScoreMetrics | null;
+  onCopyTargetToMask: () => void;
+  onCopyMaskToTarget: () => void;
+  onClearTargetLayer: () => void;
   advancedTemplatesDisabled: boolean;
   dose: number; setDose: (v: number) => void;
   params: Record<string, number>;
   setParams: (v: Record<string, number>) => void;
-  customShapes: Array<MaskShape>;
+  editableShapes: Array<MaskShape>;
+  maskShapes: Array<MaskShape>;
+  targetShapes: Array<MaskShape>;
+  presetAnchorShapes: Array<Extract<MaskShape, { type: "rect" }>>;
+  currentPresetFeatureRect: Extract<MaskShape, { type: "rect" }> | null;
+  presetFeatureOverrideActive: boolean;
+  onUpdatePresetFeatureRect: (rect: Extract<MaskShape, { type: "rect" }>) => void;
+  onResetPresetFeatureRect: () => void;
+  selectedPresetAnchorIndex: number;
+  onSetSelectedPresetAnchorIndex: (i: number) => void;
   selectedCustomShapeIndex: number;
-  setSelectedCustomShapeIndex: (i: number) => void;
   selectedCustomShapeIndexes: number[];
   onSelectCustomShapeChip: (i: number, additive?: boolean) => void;
-  drawRectMode: boolean;
-  setDrawRectMode: (v: boolean) => void;
-  onAddCustomRect: () => void;
   onDeleteCustomShape: (i: number) => void;
   onUpdateCustomShape: (i: number, shape: MaskShape) => void;
+  onAddHammerheadToSelected: () => void;
+  onAddSerifToSelected: () => void;
+  onAddMousebiteToSelected: () => void;
+  hammerheadEdge: EdgeAnchor;
+  onSetHammerheadEdge: (v: EdgeAnchor) => void;
+  serifCorner: CornerAnchor;
+  onSetSerifCorner: (v: CornerAnchor) => void;
+  mousebiteEdge: EdgeAnchor;
+  onSetMousebiteEdge: (v: EdgeAnchor) => void;
+  srafOrientation: SrafOrientation;
+  onSetSrafOrientation: (v: SrafOrientation) => void;
   freeCustomRectLimit: number;
   proCustomShapeLimit: number;
   customLimitReached: boolean;
@@ -51,6 +88,9 @@ export function ControlPanel(props: {
   onSaveCustomMaskPreset: (name: string) => void;
   onLoadCustomMaskPreset: (id: string) => void;
   onDeleteCustomMaskPreset: (id: string) => void;
+  onExportCustomMaskFile: (name: string) => void;
+  onImportCustomMaskFile: (file: File) => void | Promise<void>;
+  customMaskFileStatus: string | null;
   loading: boolean;
   onRun: () => void;
   scenarios: SavedScenario[];
@@ -72,6 +112,8 @@ export function ControlPanel(props: {
   compareBId: string;
   onSetCompareBId: (id: string) => void;
   sweepParam: SweepParam;
+  sweepGeometryScope: SweepGeometryScope;
+  onSetSweepGeometryScope: (v: SweepGeometryScope) => void;
   onSetSweepParam: (v: SweepParam) => void;
   sweepStart: number;
   sweepCustomTargetIndex: number;
@@ -97,6 +139,7 @@ export function ControlPanel(props: {
   usageStatus: UsageStatus | null;
   usageLoading: boolean;
   usageError: string | null;
+  showBrand?: boolean;
   accountUserId: string | null;
   accountSource: string | null;
   accountProExpiresAt: string | null;
@@ -108,31 +151,58 @@ export function ControlPanel(props: {
   onOpenBillingPortal: () => void;
   onUpgradeIntent: (source: string) => void;
 }) {
+  const PLAN_PANEL_COLLAPSED_KEY = "litopc_plan_panel_collapsed_v1";
+  const LEGACY_PLAN_PANEL_COLLAPSED_KEY = "opclab_plan_panel_collapsed_v1";
   const {
     plan,
     setPlan,
     maskMode,
     setMaskMode,
+    onEnterCustomEditMode,
+    activeEditLayer,
+    onSetActiveEditLayer,
+    editorTool,
+    onSetEditorTool,
     presetId,
     setPresetId,
     templateId,
     setTemplateId,
     templateOptions,
+    targetGuide,
+    onCopyTargetToMask,
+    onCopyMaskToTarget,
+    onClearTargetLayer,
     advancedTemplatesDisabled,
     dose,
     setDose,
     params,
     setParams,
-    customShapes,
+    editableShapes,
+    maskShapes,
+    targetShapes,
+    presetAnchorShapes,
+    currentPresetFeatureRect,
+    presetFeatureOverrideActive,
+    onUpdatePresetFeatureRect,
+    onResetPresetFeatureRect,
+    selectedPresetAnchorIndex,
+    onSetSelectedPresetAnchorIndex,
     selectedCustomShapeIndex,
-    setSelectedCustomShapeIndex,
     selectedCustomShapeIndexes,
     onSelectCustomShapeChip,
-    drawRectMode,
-    setDrawRectMode,
-    onAddCustomRect,
     onDeleteCustomShape,
     onUpdateCustomShape,
+    onAddHammerheadToSelected,
+    onAddSerifToSelected,
+    onAddMousebiteToSelected,
+    hammerheadEdge,
+    onSetHammerheadEdge,
+    serifCorner,
+    onSetSerifCorner,
+    mousebiteEdge,
+    onSetMousebiteEdge,
+    srafOrientation,
+    onSetSrafOrientation,
     freeCustomRectLimit,
     proCustomShapeLimit,
     customLimitReached,
@@ -141,14 +211,11 @@ export function ControlPanel(props: {
     onSaveCustomMaskPreset,
     onLoadCustomMaskPreset,
     onDeleteCustomMaskPreset,
+    onExportCustomMaskFile,
+    onImportCustomMaskFile,
+    customMaskFileStatus,
     loading,
     onRun,
-    scenarios,
-    scenarioLimit,
-    scenarioLimitReached,
-    onSaveScenario,
-    onLoadScenario,
-    onDeleteScenario,
     freeDoseMin,
     freeDoseMax,
     runHistory,
@@ -162,6 +229,8 @@ export function ControlPanel(props: {
     compareBId,
     onSetCompareBId,
     sweepParam,
+    sweepGeometryScope,
+    onSetSweepGeometryScope,
     onSetSweepParam,
     sweepStart,
     sweepCustomTargetIndex,
@@ -187,6 +256,7 @@ export function ControlPanel(props: {
     usageStatus,
     usageLoading,
     usageError,
+    showBrand = true,
     accountUserId,
     accountSource,
     accountProExpiresAt,
@@ -199,21 +269,27 @@ export function ControlPanel(props: {
     onUpgradeIntent,
   } = props;
 
-  const [scenarioName, setScenarioName] = useState("");
   const [maskPresetName, setMaskPresetName] = useState("");
   const [analysisTab, setAnalysisTab] = useState<"COMPARE" | "SWEEP">("COMPARE");
-  const [libraryTab, setLibraryTab] = useState<"SCENARIOS" | "HISTORY">("SCENARIOS");
   const [sweepLogY, setSweepLogY] = useState(false);
   const [sweepSnapshotName, setSweepSnapshotName] = useState("");
   const [planPanelCollapsed, setPlanPanelCollapsed] = useState(false);
+  const [editStudioOpen, setEditStudioOpen] = useState(true);
+  const [geometryInspectorOpen, setGeometryInspectorOpen] = useState(true);
+  const maskFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const doseMin = plan === "FREE" ? freeDoseMin : 0;
   const doseMax = plan === "FREE" ? freeDoseMax : 1;
   const doseStep = plan === "FREE" ? 0.05 : 0.01;
   const dosePolicyText = plan === "FREE" ? "Range 0.30-0.80, step 0.05" : "Range 0.00-1.00, step 0.01";
 
-  const selectedShape = customShapes[selectedCustomShapeIndex] ?? null;
-  const selectedRect = selectedShape?.type === "rect" ? selectedShape : null;
+  const selectedManualIndex = selectedCustomShapeIndexes.length === 1
+    ? selectedCustomShapeIndexes[0]
+    : selectedCustomShapeIndex;
+  const selectedShape = selectedManualIndex >= 0 ? editableShapes[selectedManualIndex] ?? null : null;
+  const manualSelectedRect = selectedCustomShapeIndexes.length === 1 && selectedShape?.type === "rect" ? selectedShape : null;
+  const editingPresetFeature = maskMode === "TEMPLATE" && !manualSelectedRect && !!currentPresetFeatureRect;
+  const selectedRect = manualSelectedRect ?? (editingPresetFeature ? currentPresetFeatureRect : null);
   const fovNm = params.fov_nm ?? 1100;
   const maxRectX = selectedRect ? Math.max(0, fovNm - selectedRect.w_nm) : fovNm;
   const maxRectY = selectedRect ? Math.max(0, fovNm - selectedRect.h_nm) : fovNm;
@@ -225,16 +301,18 @@ export function ControlPanel(props: {
     const pinned = runHistory[idx];
     return [pinned, ...runHistory.slice(0, idx), ...runHistory.slice(idx + 1)];
   }, [runHistory, currentRunId]);
-  const quickAddLocked = plan === "FREE";
-  const quickAddTitle = quickAddLocked
-    ? "Quick Add is available on Pro."
-    : (customLimitReached ? "Shape limit reached." : "Add a rectangle quickly.");
   const pitchSweepAllowed = maskMode === "TEMPLATE" && templateId === "DENSE_LS";
-  const serifSweepAllowed = maskMode === "TEMPLATE" && templateId === "CONTACT_OPC_SERIF";
-  const quickAddPromptVisible = maskMode === "CUSTOM" && quickAddLocked;
+  const serifSweepAllowed = maskMode === "TEMPLATE" && (templateId === "CONTACT_OPC_SERIF" || templateId === "L_CORNER_OPC_SERIF");
+  const steppedTemplate = templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
+  const squareTemplate = templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
+  const customShapePromptVisible = plan === "FREE" && customLimitReached;
   const sweepPromptVisible = analysisTab === "SWEEP" && sweepLocked;
-  const scenarioPromptVisible = libraryTab === "SCENARIOS" && scenarioLimitReached;
   const promptSeenRef = useRef<Record<string, boolean>>({});
+  const targetEditing = activeEditLayer === "TARGET";
+  const canUseSubtractTools = !targetEditing;
+  const presetAnchorAvailable = maskMode === "TEMPLATE" && presetAnchorShapes.length > 0;
+  const geometrySweepScopeVisible = maskMode === "TEMPLATE" && (sweepParam === "width" || sweepParam === "height");
+  const localTemplateSweepAvailable = maskMode === "TEMPLATE" && presetAnchorAvailable && selectedPresetAnchorIndex >= 0;
 
   function clamp(v: number, lo: number, hi: number) {
     return Math.max(lo, Math.min(hi, v));
@@ -246,31 +324,43 @@ export function ControlPanel(props: {
 
   function setCd(v: number) {
     const bounded = clamp(v, 1, 900);
-    if (maskMode === "CUSTOM" && selectedRect && selectedCustomShapeIndex >= 0) {
+    if (manualSelectedRect && selectedManualIndex >= 0) {
       const nextW = bounded;
       const cx = selectedRect.x_nm + selectedRect.w_nm * 0.5;
       const nextX = clamp(cx - nextW * 0.5, 0, Math.max(0, fovNm - nextW));
-      onUpdateCustomShape(selectedCustomShapeIndex, { ...selectedRect, x_nm: nextX, w_nm: nextW });
-      setParams({ ...params, cd_nm: bounded });
+      onUpdateCustomShape(selectedManualIndex, { ...selectedRect, x_nm: nextX, w_nm: nextW });
+      return;
+    }
+    if (editingPresetFeature && selectedRect) {
+      const nextW = bounded;
+      const cx = selectedRect.x_nm + selectedRect.w_nm * 0.5;
+      const nextX = clamp(cx - nextW * 0.5, 0, Math.max(0, fovNm - nextW));
+      onUpdatePresetFeatureRect({ ...selectedRect, x_nm: nextX, w_nm: nextW });
       return;
     }
     const next: Record<string, number> = { ...params, cd_nm: bounded };
-    if (templateId === "STAIRCASE") next.thickness_nm = bounded;
-    if (templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF") next.w_nm = bounded;
+    if (steppedTemplate) next.thickness_nm = bounded;
+    if (squareTemplate) next.w_nm = bounded;
     setParams(next);
   }
 
   function setHeight(v: number) {
     const bounded = clamp(v, 1, 900);
-    if (maskMode === "CUSTOM" && selectedRect && selectedCustomShapeIndex >= 0) {
+    if (manualSelectedRect && selectedManualIndex >= 0) {
       const nextH = bounded;
       const cy = selectedRect.y_nm + selectedRect.h_nm * 0.5;
       const nextY = clamp(cy - nextH * 0.5, 0, Math.max(0, fovNm - nextH));
-      onUpdateCustomShape(selectedCustomShapeIndex, { ...selectedRect, y_nm: nextY, h_nm: nextH });
-      setParams({ ...params, length_nm: bounded });
+      onUpdateCustomShape(selectedManualIndex, { ...selectedRect, y_nm: nextY, h_nm: nextH });
       return;
     }
-    if (templateId === "STAIRCASE") {
+    if (editingPresetFeature && selectedRect) {
+      const nextH = bounded;
+      const cy = selectedRect.y_nm + selectedRect.h_nm * 0.5;
+      const nextY = clamp(cy - nextH * 0.5, 0, Math.max(0, fovNm - nextH));
+      onUpdatePresetFeatureRect({ ...selectedRect, y_nm: nextY, h_nm: nextH });
+      return;
+    }
+    if (steppedTemplate) {
       setParam("step_h_nm", bounded);
       return;
     }
@@ -278,14 +368,25 @@ export function ControlPanel(props: {
   }
 
   function setRectAxis(axis: "x" | "y", next: number) {
-    if (!selectedRect || selectedCustomShapeIndex < 0) return;
+    if (!selectedRect) return;
+    if (editingPresetFeature) {
+      if (axis === "x") {
+        const x = clamp(next, 0, maxRectX);
+        onUpdatePresetFeatureRect({ ...selectedRect, x_nm: x });
+        return;
+      }
+      const y = clamp(next, 0, maxRectY);
+      onUpdatePresetFeatureRect({ ...selectedRect, y_nm: y });
+      return;
+    }
+    if (!manualSelectedRect || selectedManualIndex < 0) return;
     if (axis === "x") {
       const x = clamp(next, 0, maxRectX);
-      onUpdateCustomShape(selectedCustomShapeIndex, { ...selectedRect, x_nm: x });
+      onUpdateCustomShape(selectedManualIndex, { ...selectedRect, x_nm: x });
       return;
     }
     const y = clamp(next, 0, maxRectY);
-    onUpdateCustomShape(selectedCustomShapeIndex, { ...selectedRect, y_nm: y });
+    onUpdateCustomShape(selectedManualIndex, { ...selectedRect, y_nm: y });
   }
 
   function markUpgradePromptViewed(source: string, visible: boolean) {
@@ -300,51 +401,43 @@ export function ControlPanel(props: {
   }
 
   useEffect(() => {
-    markUpgradePromptViewed("custom_quick_add", quickAddPromptVisible);
-  }, [quickAddPromptVisible, plan]);
+    markUpgradePromptViewed("custom_shape_limit", customShapePromptVisible);
+  }, [customShapePromptVisible, plan]);
 
   useEffect(() => {
     markUpgradePromptViewed("sweep_batch", sweepPromptVisible);
   }, [sweepPromptVisible, plan]);
 
   useEffect(() => {
-    markUpgradePromptViewed("scenario_slots", scenarioPromptVisible);
-  }, [scenarioPromptVisible, plan]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem("opclab_plan_panel_collapsed_v1");
+    const raw = window.localStorage.getItem(PLAN_PANEL_COLLAPSED_KEY)
+      ?? window.localStorage.getItem(LEGACY_PLAN_PANEL_COLLAPSED_KEY);
     setPlanPanelCollapsed(raw === "1");
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem("opclab_plan_panel_collapsed_v1", planPanelCollapsed ? "1" : "0");
+    window.localStorage.setItem(PLAN_PANEL_COLLAPSED_KEY, planPanelCollapsed ? "1" : "0");
   }, [planPanelCollapsed]);
 
   return (
-    <div className="opclab-panel panel-compact" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div className="panel-head panel-head-compact panel-brand-head">
-        <div className="panel-brand">
-          <div className="panel-brand-text">
-            <h2 className="panel-brand-wordmark">
-              <span className="wordmark-opc" aria-label="OPC">
-                <span>O</span>
-                <span>P</span>
-                <span>C</span>
-              </span>
-              <span className="wordmark-lab" aria-label="Lab">
-                <span>L</span>
-                <span>a</span>
-                <span>b</span>
-              </span>
-            </h2>
-            <div className="panel-brand-divider" aria-hidden="true" />
-            <div className="panel-brand-sub">Simulator</div>
+    <div className="litopc-panel panel-compact control-panel-shell" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {showBrand && (
+        <div className="panel-head panel-head-compact panel-brand-head">
+          <div className="panel-brand">
+            <div className="panel-brand-text panel-brand-retixel">
+              <h2 className="panel-brand-wordmark-retixel" aria-label="litopc">
+                <span className="panel-brand-wordmark-lit">lit</span>
+                <span className="panel-brand-wordmark-opc">opc</span>
+              </h2>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <div className="panel-body panel-body-compact">
+        <div className="workspace-edit-dock-head control-panel-head">
+          <div className="workspace-edit-dock-eyebrow">Control</div>
+        </div>
         <div className="group-card compact">
           <div className="plan-row">
             <span className="group-title-inline">Plan</span>
@@ -418,7 +511,9 @@ export function ControlPanel(props: {
               <button className="mini-btn slim plan-action-btn" onClick={onOpenBillingPortal}>
                 Billing
               </button>
-              <a href="/opclab/internal-login" className="mini-btn slim plan-action-btn plan-action-link">
+            </div>
+            <div className="plan-secondary-links">
+              <a href="/litopc/internal-login" className="plan-action-link-muted">
                 Internal Login
               </a>
             </div>
@@ -437,11 +532,123 @@ export function ControlPanel(props: {
           <p className="group-title">Optics Setup</p>
           <label className="label">Imaging Tool</label>
           <select value={presetId} onChange={(e) => setPresetId(e.target.value as any)} style={{ width: "100%" }}>
-            <option value="DUV_193_DRY">DUV 193 Dry</option>
-            <option value="EUV_LNA">EUV Low-NA 0.33</option>
-            {plan === "PRO" && <option value="DUV_193_IMM">DUV 193 Immersion (Pro)</option>}
-            {plan === "PRO" && <option value="EUV_HNA">EUV High-NA 0.55 (Pro)</option>}
+            <option value="DUV_193_DRY">DUV | 193 nm Dry</option>
+            <option value="EUV_LNA">EUV | 13.5 nm Low-NA</option>
+            {plan === "PRO" && <option value="DUV_193_IMM">DUV | 193 nm Immersion (Pro)</option>}
+            {plan === "PRO" && <option value="EUV_HNA">EUV | 13.5 nm High-NA (Pro)</option>}
           </select>
+        </div>
+
+        <div className="group-card compact run-card">
+          <button className="run-main-btn" onClick={onRun} disabled={loading}>
+            {loading ? "Running..." : "Run Simulation"}
+          </button>
+        </div>
+
+        <div className="group-card compact">
+          <p className="group-title">Mask & Geometry</p>
+          <label className="label">Mask Source</label>
+          <div className="mask-mode-seg" style={{ marginBottom: 8 }}>
+            <button onClick={() => setMaskMode("TEMPLATE")} disabled={maskMode === "TEMPLATE"}>
+              <span className="mode-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="2.1" />
+                  <path d="M5 5h6M5 8h6M5 11h4.2" />
+                </svg>
+              </span>
+              Preset
+            </button>
+            <button onClick={onEnterCustomEditMode} disabled={maskMode === "CUSTOM"}>
+              <span className="mode-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2.8 12.8h3.6v-3.6H2.8zM9.6 13.2l3.6-3.6M11.3 2.8h2v2h-2zM2.8 2.8h2v2h-2z" />
+                  <path d="M4.8 4.8l5 5M9.8 9.8l1.5 1.5" />
+                </svg>
+              </span>
+              Custom Edit
+            </button>
+          </div>
+
+          {maskMode === "TEMPLATE" && (
+            <>
+              <label className="label">Pattern</label>
+              <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>
+                {templateOptions.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {plan === "PRO" && (
+            <div className="mask-library mask-library-bottom">
+              <div className="small-note tiny-note">Mask Library (Pro)</div>
+              <div className="row">
+                <input
+                  type="text"
+                  placeholder="mask name"
+                  value={maskPresetName}
+                  onChange={(e) => setMaskPresetName(e.target.value)}
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <button
+                  className="mini-btn"
+                  disabled={!maskPresetName.trim() || (maskMode === "CUSTOM" && maskShapes.length === 0)}
+                  onClick={() => {
+                    onSaveCustomMaskPreset(maskPresetName);
+                    setMaskPresetName("");
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+              <div className="row" style={{ marginTop: 6 }}>
+                <button
+                  className="mini-btn"
+                  disabled={maskMode === "CUSTOM" && maskShapes.length === 0}
+                  onClick={() => onExportCustomMaskFile(maskPresetName)}
+                  title="Download current mask as a litopc mask data file."
+                >
+                  Save File
+                </button>
+                <button
+                  className="mini-btn"
+                  onClick={() => maskFileInputRef.current?.click()}
+                  title="Import a saved litopc mask data file and keep it in Mask Library."
+                >
+                  Load File
+                </button>
+                <input
+                  ref={maskFileInputRef}
+                  type="file"
+                  accept=".opcmask,.json,.opcmask.json"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.currentTarget.value = "";
+                    if (!file) return;
+                    void onImportCustomMaskFile(file);
+                  }}
+                />
+              </div>
+              {customMaskFileStatus && <div className="small-note tiny-note" style={{ marginTop: 6 }}>{customMaskFileStatus}</div>}
+              <div className="shape-chip-list pro">
+                {customMaskPresets.length === 0 && <div className="small-note tiny-note">No saved masks.</div>}
+                {customMaskPresets.map((m) => (
+                  <div key={m.id} className="shape-chip">
+                    <span
+                      className={`mask-type-badge ${m.mode === "CUSTOM" ? "custom" : "template"}`}
+                      title={m.mode === "CUSTOM" ? "Custom Mask" : "Preset Mask"}
+                    >
+                      {m.mode === "CUSTOM" ? "C" : "T"}
+                    </span>
+                    <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
+                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)} aria-label={`Delete ${m.name}`}>x</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="group-card compact">
@@ -473,321 +680,6 @@ export function ControlPanel(props: {
           </div>
         </div>
 
-        <div className="group-card compact run-card">
-          <button className="run-main-btn" onClick={onRun} disabled={loading}>
-            {loading ? "Running..." : "Run Simulation"}
-          </button>
-        </div>
-
-        <div className="group-card compact">
-          <p className="group-title">Mask & Geometry</p>
-          <label className="label">Mask Source</label>
-          <div className="mask-mode-seg" style={{ marginBottom: 8 }}>
-            <button onClick={() => setMaskMode("TEMPLATE")} disabled={maskMode === "TEMPLATE"}>
-              <span className="mode-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="2.1" />
-                  <path d="M5 5h6M5 8h6M5 11h4.2" />
-                </svg>
-              </span>
-              Preset
-            </button>
-            <button onClick={() => setMaskMode("CUSTOM")} disabled={maskMode === "CUSTOM"}>
-              <span className="mode-btn-icon" aria-hidden="true">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2.8 12.8h3.6v-3.6H2.8zM9.6 13.2l3.6-3.6M11.3 2.8h2v2h-2zM2.8 2.8h2v2h-2z" />
-                  <path d="M4.8 4.8l5 5M9.8 9.8l1.5 1.5" />
-                </svg>
-              </span>
-              Custom Mask
-            </button>
-          </div>
-
-          {maskMode === "TEMPLATE" ? (
-            <>
-              <label className="label">Pattern</label>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value as any)} style={{ width: "100%" }}>
-                {templateOptions.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </>
-          ) : (
-            <>
-              <div className="draw-action-row" style={{ marginBottom: 6 }}>
-                <button className={`mini-btn draw-action ${drawRectMode ? "active-draw-btn" : ""}`} onClick={() => setDrawRectMode(!drawRectMode)}>
-                  <span className="mode-btn-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 3h10v10H3zM3 7h10M7 3v10" />
-                    </svg>
-                  </span>
-                  {drawRectMode ? "Drawing..." : "Draw Rectangular"}
-                </button>
-                <button
-                  className="mini-btn draw-action"
-                  onClick={onAddCustomRect}
-                  disabled={!quickAddLocked && customShapes.length >= proCustomShapeLimit}
-                  title={quickAddTitle}
-                >
-                  <span className="mode-btn-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M8 3.2v9.6M3.2 8h9.6" />
-                    </svg>
-                  </span>
-                  {quickAddLocked ? "Quick Add (Pro)" : "Quick Add"}
-                </button>
-              </div>
-              <div className="dose-policy-row">
-                <span className="dose-policy-tag">Shape limit</span>
-                <span
-                  className="dose-policy-info"
-                  title={
-                    plan === "FREE"
-                      ? `Free: up to ${freeCustomRectLimit} rectangulars. Quick Add is Pro-only.`
-                      : `Pro: up to ${proCustomShapeLimit} rectangulars`
-                  }
-                >
-                  i
-                </span>
-              </div>
-              {(customLimitReached || customLimitNotice || quickAddLocked) && (
-                <div className="upgrade-inline-wrap">
-                  <div className="small-note tiny-note">
-                    {customLimitNotice
-                      ? customLimitNotice
-                      : (quickAddLocked
-                          ? `Free limit: ${freeCustomRectLimit} rectangles. Draw on canvas is enabled; Quick Add is Pro-only.`
-                          : `Shape limit reached (${proCustomShapeLimit}).`)}
-                  </div>
-                  {quickAddLocked && (
-                    <button className="mini-btn slim upgrade-inline-cta" onClick={() => requestUpgrade("custom_quick_add")}>
-                      Upgrade
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="shape-chip-list">
-                {customShapes.length === 0 && <div className="small-note tiny-note">Draw in 2D panel.</div>}
-                {customShapes.map((_, i) => (
-                  <div key={i} className={`shape-chip ${selectedCustomShapeIndexes.includes(i) ? "selected" : ""}`}>
-                    <button
-                      className="mini-btn slim"
-                      onClick={(e) => onSelectCustomShapeChip(i, e.shiftKey || e.ctrlKey || e.metaKey)}
-                    >
-                      R{i + 1}
-                    </button>
-                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomShape(i)}>Del</button>
-                  </div>
-                ))}
-              </div>
-              <div className="small-note tiny-note editor-help-note">
-                Move guide: select one R chip (single) or use Shift/Ctrl/Cmd+click for multi-select, then drag in 2D or use Arrow keys (Shift+Arrow = x10).
-              </div>
-
-              {selectedRect && (
-                <>
-                  <label className="label" style={{ marginTop: 7 }}>X Position (nm)</label>
-                  <div className="row">
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(1, maxRectX)}
-                      step={1}
-                      value={clamp(selectedRect.x_nm, 0, Math.max(1, maxRectX))}
-                      onChange={(e) => setRectAxis("x", Number(e.target.value))}
-                      style={{ flex: 1 }}
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      max={Math.max(1, maxRectX)}
-                      step={1}
-                      value={Math.round(selectedRect.x_nm)}
-                      onChange={(e) => setRectAxis("x", Number(e.target.value))}
-                      style={{ width: 88 }}
-                    />
-                  </div>
-                  <label className="label" style={{ marginTop: 7 }}>Y Position (nm)</label>
-                  <div className="row">
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(1, maxRectY)}
-                      step={1}
-                      value={clamp(selectedRect.y_nm, 0, Math.max(1, maxRectY))}
-                      onChange={(e) => setRectAxis("y", Number(e.target.value))}
-                      style={{ flex: 1 }}
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      max={Math.max(1, maxRectY)}
-                      step={1}
-                      value={Math.round(selectedRect.y_nm)}
-                      onChange={(e) => setRectAxis("y", Number(e.target.value))}
-                      style={{ width: 88 }}
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="small-note tiny-note" style={{ marginTop: 4 }}>
-                Tip: clicking a ruler handle gives arrow control to ruler; reselect any R chip to move rectangles.
-              </div>
-            </>
-          )}
-
-          <label className="label" style={{ marginTop: 8 }}>Width (nm)</label>
-          <div className="row">
-            <input
-              type="range"
-              min={1}
-              max={900}
-              step={1}
-              value={maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 100)}
-              onChange={(e) => setCd(parseFloat(e.target.value))}
-              style={{ flex: 1 }}
-            />
-            <input
-              type="number"
-              min={1}
-              max={900}
-              step={1}
-              value={Math.round(maskMode === "CUSTOM" && selectedRect ? selectedRect.w_nm : (params.cd_nm ?? 100))}
-              onChange={(e) => setCd(parseFloat(e.target.value))}
-              style={{ width: 88 }}
-            />
-          </div>
-
-          {(maskMode === "CUSTOM" || templateId === "ISO_LINE" || templateId === "DENSE_LS" || templateId === "STAIRCASE") && (
-            <>
-              <label className="label" style={{ marginTop: 8 }}>
-                {templateId === "STAIRCASE" ? "Step Height (nm)" : "Height (nm)"}
-              </label>
-              <div className="row">
-                <input
-                  type="range"
-                  min={10}
-                  max={900}
-                  step={1}
-                  value={
-                    maskMode === "CUSTOM" && selectedRect
-                      ? selectedRect.h_nm
-                      : (templateId === "STAIRCASE" ? (params.step_h_nm ?? 40) : (params.length_nm ?? 900))
-                  }
-                  onChange={(e) => setHeight(parseFloat(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  min={10}
-                  max={900}
-                  step={1}
-                  value={Math.round(
-                    maskMode === "CUSTOM" && selectedRect
-                      ? selectedRect.h_nm
-                      : (templateId === "STAIRCASE" ? (params.step_h_nm ?? 40) : (params.length_nm ?? 900))
-                  )}
-                  onChange={(e) => setHeight(parseFloat(e.target.value))}
-                  style={{ width: 88 }}
-                />
-              </div>
-            </>
-          )}
-
-          {maskMode === "TEMPLATE" && templateId === "DENSE_LS" && (
-            <>
-              <label className="label" style={{ marginTop: 8 }}>Pitch (nm)</label>
-              <div className="row">
-                <input
-                  type="range"
-                  min={60}
-                  max={300}
-                  step={1}
-                  value={params.pitch_nm ?? 140}
-                  onChange={(e) => setParam("pitch_nm", parseFloat(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  min={60}
-                  max={300}
-                  step={1}
-                  value={params.pitch_nm ?? 140}
-                  onChange={(e) => setParam("pitch_nm", parseFloat(e.target.value))}
-                  style={{ width: 88 }}
-                />
-              </div>
-            </>
-          )}
-
-          {maskMode === "TEMPLATE" && (templateId === "CONTACT_OPC_SERIF" || templateId === "L_CORNER_OPC_SERIF") && (
-            <>
-              <label className="label" style={{ marginTop: 8 }}>Serif Size (nm)</label>
-              <div className="row">
-                <input
-                  type="range"
-                  min={5}
-                  max={200}
-                  step={1}
-                  value={params.serif_nm ?? 28}
-                  onChange={(e) => setParam("serif_nm", parseFloat(e.target.value))}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  type="number"
-                  min={5}
-                  max={200}
-                  step={1}
-                  value={Math.round(params.serif_nm ?? 28)}
-                  onChange={(e) => setParam("serif_nm", parseFloat(e.target.value))}
-                  style={{ width: 88 }}
-                />
-              </div>
-            </>
-          )}
-
-          {plan === "PRO" && (
-            <div className="mask-library mask-library-bottom">
-              <div className="small-note tiny-note">Mask Library (Pro)</div>
-              <div className="row">
-                <input
-                  type="text"
-                  placeholder="mask name"
-                  value={maskPresetName}
-                  onChange={(e) => setMaskPresetName(e.target.value)}
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <button
-                  className="mini-btn"
-                  disabled={!maskPresetName.trim() || (maskMode === "CUSTOM" && customShapes.length === 0)}
-                  onClick={() => {
-                    onSaveCustomMaskPreset(maskPresetName);
-                    setMaskPresetName("");
-                  }}
-                >
-                  Save
-                </button>
-              </div>
-              <div className="shape-chip-list pro">
-                {customMaskPresets.length === 0 && <div className="small-note tiny-note">No saved masks.</div>}
-                {customMaskPresets.map((m) => (
-                  <div key={m.id} className="shape-chip">
-                    <span
-                      className={`mask-type-badge ${m.mode === "CUSTOM" ? "custom" : "template"}`}
-                      title={m.mode === "CUSTOM" ? "Custom Mask" : "Preset Mask"}
-                    >
-                      {m.mode === "CUSTOM" ? "C" : "T"}
-                    </span>
-                    <button className="mini-btn slim" onClick={() => onLoadCustomMaskPreset(m.id)}>{m.name}</button>
-                    <button className="mini-btn slim danger" onClick={() => onDeleteCustomMaskPreset(m.id)}>Del</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
         <div className="group-card compact">
           <p className="group-title">Analysis</p>
           <div className="analysis-panel">
@@ -797,6 +689,12 @@ export function ControlPanel(props: {
             </div>
             {analysisTab === "COMPARE" && (
               <div className="analysis-panel">
+                <div className="analysis-head">
+                  <div className="analysis-title">A/B Compare</div>
+                  <div className="analysis-sub">
+                    Pin two saved runs to inspect contour deltas, CD shifts, and recipe tradeoffs side by side in the viewport.
+                  </div>
+                </div>
                 <label className="analysis-switch-row">
                   <span>Overlay compare</span>
                   <input type="checkbox" checked={compareEnabled} onChange={(e) => onSetCompareEnabled(e.target.checked)} />
@@ -836,7 +734,13 @@ export function ControlPanel(props: {
                 <div className="analysis-head">
                   <div className="analysis-title">Sweep Studio</div>
                   <div className="analysis-sub">
-                    Width, height, and dose are baseline options. Pitch is available only for Dense L/S, and Serif is available only for Contact (OPC Serif).
+                    {geometrySweepScopeVisible
+                      ? sweepGeometryScope === "LOCAL"
+                        ? (localTemplateSweepAvailable
+                            ? "Local geometry sweep changes only the selected mask feature from Edit Studio."
+                            : "Select a mask feature in Edit Studio to enable local geometry sweep.")
+                        : "Global geometry sweep changes pattern-wide parameters. Dense L/S keeps repetition linked to width and pitch."
+                      : "Width, height, and dose are baseline options. Pitch is available only for Dense L/S, and Serif is available only for Square OPC or L-Shape OPC."}
                   </div>
                 </div>
                 {sweepLocked && (
@@ -860,6 +764,26 @@ export function ControlPanel(props: {
                     {sweepLogY ? "Log" : "Linear"}
                   </button>
                 </div>
+                {geometrySweepScopeVisible && (
+                  <div className="analysis-seg compact" style={{ marginBottom: 10 }}>
+                    <button
+                      className={sweepGeometryScope === "LOCAL" ? "active" : ""}
+                      onClick={() => onSetSweepGeometryScope("LOCAL")}
+                      disabled={sweepLocked || !localTemplateSweepAvailable}
+                      title={localTemplateSweepAvailable ? "Sweep the selected mask feature only." : "Select a mask feature first."}
+                    >
+                      Local
+                    </button>
+                    <button
+                      className={sweepGeometryScope === "GLOBAL" ? "active" : ""}
+                      onClick={() => onSetSweepGeometryScope("GLOBAL")}
+                      disabled={sweepLocked}
+                      title="Sweep pattern-wide geometry parameters."
+                    >
+                      Global
+                    </button>
+                  </div>
+                )}
                 <div className="sweep-grid">
                   <label className="label" style={{ marginBottom: 0 }}>
                     Parameter
@@ -880,7 +804,7 @@ export function ControlPanel(props: {
                     <div>
                       <div className="small-note tiny-note" style={{ marginBottom: 4 }}>Target Rect</div>
                       <div className="shape-chip-list sweep-target-list">
-                        {customShapes.map((s, i) =>
+                        {maskShapes.map((s, i) =>
                           s.type === "rect" ? (
                             <div key={`sweep-target-${i}`} className={`shape-chip ${i === sweepCustomTargetIndex ? "selected target" : ""}`}>
                               <button
@@ -1000,11 +924,11 @@ export function ControlPanel(props: {
                         {s.name}
                       </div>
                       <div className="small-note tiny-note">
-                        {s.param} · {s.count} pts · {new Date(s.createdAt).toLocaleString()}
+                        {s.param} 쨌 {s.count} pts 쨌 {new Date(s.createdAt).toLocaleString()}
                       </div>
                       <div className="analysis-actions">
                         <button className="mini-btn slim" onClick={() => onLoadSweepSnapshot(s.id)}>Load</button>
-                        <button className="mini-btn slim danger" onClick={() => onDeleteSweepSnapshot(s.id)}>Del</button>
+                        <button className="mini-btn slim danger" onClick={() => onDeleteSweepSnapshot(s.id)} aria-label={`Delete ${s.name}`}>x</button>
                       </div>
                     </div>
                   ))}
@@ -1014,125 +938,105 @@ export function ControlPanel(props: {
           </div>
         </div>
 
-        <div className="group-card compact" style={{ marginBottom: 0 }}>
-          <p className="group-title">Workspace</p>
-          <div className="analysis-panel">
-            <div className="analysis-seg compact">
-              <button className={libraryTab === "SCENARIOS" ? "active" : ""} onClick={() => setLibraryTab("SCENARIOS")}>
-                Scenarios ({scenarios.length}{scenarioLimit !== null ? `/${scenarioLimit}` : ""})
-              </button>
-              <button className={libraryTab === "HISTORY" ? "active" : ""} onClick={() => setLibraryTab("HISTORY")}>
-                History ({runHistory.length})
-              </button>
-            </div>
-            {libraryTab === "SCENARIOS" && (
-              <div className="analysis-panel">
-                <div className="row">
-                  <input
-                    type="text"
-                    value={scenarioName}
-                    onChange={(e) => setScenarioName(e.target.value)}
-                    placeholder="scenario name"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    onClick={() => {
-                      const next = scenarioName.trim();
-                      if (!next) return;
-                      onSaveScenario(next);
-                      setScenarioName("");
-                    }}
-                    disabled={!scenarioName.trim() || scenarioLimitReached}
-                    className="mini-btn"
-                    title={scenarioLimitReached ? "Upgrade to Pro for unlimited scenario saves." : undefined}
-                  >
-                    Save
-                  </button>
-                </div>
-                {scenarioLimitReached && (
-                  <div className="upgrade-inline-wrap">
-                    <div className="small-note tiny-note">
-                      Free scenario slots are full. Upgrade to Pro for unlimited saves.
-                    </div>
-                    <button className="mini-btn slim upgrade-inline-cta" onClick={() => requestUpgrade("scenario_slots")}>
-                      Upgrade
-                    </button>
-                  </div>
-                )}
-                <div className="analysis-list">
-                  {scenarios.length === 0 && <div className="small-note tiny-note">No scenarios.</div>}
-                  {scenarios.map((s) => (
-                    <div key={s.id} className="analysis-item">
-                      <div className="analysis-item-title">{s.name}</div>
-                      <div className="analysis-actions">
-                        <button className="mini-btn slim" onClick={() => onLoadScenario(s.id)}>Load</button>
-                        <button className="mini-btn slim danger" onClick={() => onDeleteScenario(s.id)}>Delete</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {libraryTab === "HISTORY" && (
-              <div className="analysis-panel">
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <div className="small-note tiny-note">{runHistory.length} run(s)</div>
-                  <button className="mini-btn slim" onClick={onClearHistory} disabled={!runHistory.length}>Clear</button>
-                </div>
-                {currentRun && (
-                  <div className="small-note tiny-note">
-                    Current run is pinned: {currentRun.label}
-                  </div>
-                )}
-                <div className="analysis-list">
-                  {runHistory.length === 0 && <div className="small-note tiny-note">No runs yet.</div>}
-                  {orderedHistory.map((h) => (
-                    <div
-                      key={h.id}
-                      className={`analysis-item ${h.id === currentRunId ? "analysis-item-current" : ""}`}
-                      aria-current={h.id === currentRunId ? "true" : undefined}
-                    >
-                      <div className="analysis-item-title history-item-head">
-                        <span>{h.label}</span>
-                        {h.id === currentRunId && <span className="history-current-badge">Current</span>}
-                      </div>
-                      <div className="analysis-actions">
-                        <button className="mini-btn slim" onClick={() => onLoadHistoryRun(h.id)}>View</button>
-                        <button className="mini-btn slim" onClick={() => onSetCompareAId(h.id)}>A</button>
-                        <button className="mini-btn slim" onClick={() => onSetCompareBId(h.id)}>B</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+        <div className="group-card compact history-panel-card">
+          <div className="history-panel-head">
+            <p className="group-title">History</p>
+            <span className="history-panel-count">{runHistory.length} run{runHistory.length === 1 ? "" : "s"}</span>
           </div>
+          <div className="analysis-head history-panel-copy">
+            <div className="analysis-title">Recent simulation states</div>
+            <div className="analysis-sub">Reopen prior runs or send them directly into A/B compare.</div>
+          </div>
+          <div className="history-panel-toolbar">
+            <div className="small-note tiny-note">
+              {currentRun ? `Current run: ${currentRun.label}` : "Runs are stored automatically after each simulation."}
+            </div>
+            <button className="mini-btn slim" onClick={onClearHistory} disabled={!runHistory.length}>Clear</button>
+          </div>
+          <div className="analysis-list history-panel-list">
+            {runHistory.length === 0 && <div className="small-note tiny-note">No runs yet.</div>}
+            {orderedHistory.map((h) => (
+              <div
+                key={h.id}
+                className={`analysis-item ${h.id === currentRunId ? "analysis-item-current" : ""}`}
+                aria-current={h.id === currentRunId ? "true" : undefined}
+              >
+                <div className="analysis-item-title history-item-head">
+                  <span>{h.label}</span>
+                  {h.id === currentRunId && <span className="history-current-badge">Current</span>}
+                </div>
+                <div className="analysis-actions">
+                  <button className="mini-btn slim" onClick={() => onLoadHistoryRun(h.id)}>View</button>
+                  <button className="mini-btn slim" onClick={() => onSetCompareAId(h.id)}>A</button>
+                  <button className="mini-btn slim" onClick={() => onSetCompareBId(h.id)}>B</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-          <p className="small-note tiny-note" style={{ margin: "8px 2px 2px" }}>
-            Educational approximation. Not calibrated.
-          </p>
-          <a href="/opclab/model-summary" className="model-guide-link" style={{ marginTop: 10 }}>
-            <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center" }}>
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2.2" y="2.3" width="11.6" height="11.2" rx="2.1" />
-                <path d="M5.1 5.2h5.8M5.1 8h5.8M5.1 10.8h3.9" />
-              </svg>
-            </span>
-            Imaging & Limits Guide
-          </a>
-          <div className="trust-links-row" style={{ marginTop: 8 }}>
-            <a href="/opclab/revenue-dashboard" className="trust-link-mini">Revenue Dashboard</a>
+        <div className="group-card compact resource-panel-card" style={{ marginBottom: 0 }}>
+          <div className="resource-panel-head">
+            <p className="group-title">Resources</p>
+            <span className="resource-panel-chip">Guide & profile</span>
           </div>
-          <div className="creator-credit-card">
-            <div className="creator-credit-head">© 2026 Min-Cheol Lee</div>
-            <div className="creator-credit-links">
-              <a href="mailto:mincheol.chris.lee@gmail.com">email</a>
-              <span className="creator-credit-sep" aria-hidden="true">/</span>
-              <a href="https://www.linkedin.com/in/min-cheol-lee/" target="_blank" rel="noreferrer">linkedin</a>
-              <span className="creator-credit-sep" aria-hidden="true">/</span>
-              <a href="https://mincheollee.com" target="_blank" rel="noreferrer">mincheollee.com</a>
+          <div className="resource-link-grid">
+            <a href="/litopc/model-summary" className="resource-link-card">
+              <span className="resource-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2.2" y="2.3" width="11.6" height="11.2" rx="2.1" />
+                  <path d="M5.1 5.2h5.8M5.1 8h5.8M5.1 10.8h3.9" />
+                </svg>
+              </span>
+              <span className="resource-link-copy">
+                <strong>Imaging & Limits Guide</strong>
+                <small>Optics presets, model boundaries, and interpretation notes.</small>
+              </span>
+            </a>
+            <a href="/litopc/revenue-dashboard" className="resource-link-card resource-link-card-accent">
+              <span className="resource-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2.4 13.2h11.2" />
+                  <path d="M4.3 10.2V7.8" />
+                  <path d="M8 10.2V4.8" />
+                  <path d="M11.7 10.2V6.1" />
+                </svg>
+              </span>
+              <span className="resource-link-copy">
+                <strong>Revenue Dashboard</strong>
+                <small>Commercial signals, conversion checkpoints, and pricing telemetry.</small>
+              </span>
+            </a>
+          </div>
+          <div className="resource-docs-block">
+            <div className="resource-docs-head">
+              <span className="resource-docs-title">Model details</span>
+              <a href="/litopc/model-summary" className="resource-docs-anchor">Open</a>
+            </div>
+            <div className="resource-docs-links">
+              <a href="/litopc/benchmark-gallery">Benchmark Gallery</a>
+              <a href="/litopc/model-change-log">Model Change Log</a>
+              <a href="/litopc/trust-dashboard">Trust Dashboard</a>
+              <a href="/litopc/advanced-analytics">Advanced Analytics</a>
             </div>
           </div>
+          <div className="creator-profile-card">
+            <div className="creator-profile-head">
+              <div>
+                <div className="creator-profile-eyebrow">Creator</div>
+                <div className="creator-profile-name">Min-Cheol Lee</div>
+              </div>
+              <div className="creator-profile-role">Software 쨌 Physics 쨌 OPC</div>
+            </div>
+            <div className="creator-profile-links">
+              <a href="mailto:mincheol.chris.lee@gmail.com">Email</a>
+              <a href="https://www.linkedin.com/in/min-cheol-lee/" target="_blank" rel="noreferrer">LinkedIn</a>
+              <a href="https://mincheollee.com" target="_blank" rel="noreferrer">Website</a>
+            </div>
+          </div>
+          <p className="small-note tiny-note resource-footnote">
+            Educational approximation. Not calibrated for sign-off.
+          </p>
         </div>
       </div>
     </div>

@@ -19,15 +19,11 @@ export default function InternalLoginPage() {
 
   function saveAndContinue() {
     const uid = userId.trim();
-    if (!uid) {
-      setMessage("Tester user id is required.");
-      return;
-    }
     setDevUserId(uid);
     setDevEmail(email.trim());
     setAccessToken(token.trim());
     setMessage("Saved. Redirecting to simulator...");
-    window.setTimeout(() => router.push("/opclab"), 240);
+    window.setTimeout(() => router.push("/litopc"), 240);
   }
 
   function clearSession() {
@@ -43,7 +39,7 @@ export default function InternalLoginPage() {
   return (
     <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px", background: "linear-gradient(180deg, #eef3fb 0%, #f7f9fc 100%)" }}>
       <section style={{ width: "min(560px, 100%)", borderRadius: 18, border: "1px solid rgba(25,40,62,0.14)", background: "rgba(255,255,255,0.9)", boxShadow: "0 16px 40px rgba(31,46,74,0.12)", padding: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>OPC Lab Internal Login</h1>
+        <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>litopc Internal Login</h1>
         <p style={{ marginTop: 8, marginBottom: 14, color: "rgba(23,35,53,0.74)", fontSize: 14 }}>
           This page is for invite-only internal testing. It stores test identity in local browser storage.
         </p>

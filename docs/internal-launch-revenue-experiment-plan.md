@@ -1,4 +1,4 @@
-# OPC Lab Simulator Internal Launch Plan
+# litopc Simulator Internal Launch Plan
 
 Date: 2026-02-25  
 Owner: Product + Engineering  
@@ -11,9 +11,9 @@ Goal: start paid-conversion experiments safely with internal testers before publ
 - Run controlled monetization experiment with measurable KPIs.
 
 ## 2) Current Risk Snapshot (must fix before paid test)
-- Request payload still carries plan selection (`plan: Plan`): [models.py](c:\Users\minch\project\opc-lab\backend\app\models.py:64)
-- Usage/event/policy storage is in-memory only (data resets on restart): [main.py](c:\Users\minch\project\opc-lab\backend\app\main.py:88)
-- Quota decision depends on request-level plan path in simulate flow: [main.py](c:\Users\minch\project\opc-lab\backend\app\main.py:592)
+- Request payload still carries plan selection (`plan: Plan`): [models.py](c:\Users\minch\project\litopc\backend\app\models.py:64)
+- Usage/event/policy storage is in-memory only (data resets on restart): [main.py](c:\Users\minch\project\litopc\backend\app\main.py:88)
+- Quota decision depends on request-level plan path in simulate flow: [main.py](c:\Users\minch\project\litopc\backend\app\main.py:592)
 
 If left as-is, conversion metrics and policy integrity are not reliable enough for billing experiments.
 
@@ -41,7 +41,7 @@ Backend tasks:
 - Add request context helper `resolve_user_id()`.
 
 Frontend tasks:
-- Add auth session provider and login guard on `/opclab`.
+- Add auth session provider and login guard on `/litopc`.
 - Send access token with API calls.
 
 Acceptance:
@@ -59,9 +59,9 @@ Backend tasks:
 - Keep `/entitlements` endpoint but back it by DB + defaults.
 
 Key touchpoints:
-- [models.py](c:\Users\minch\project\opc-lab\backend\app\models.py:64)
-- [main.py](c:\Users\minch\project\opc-lab\backend\app\main.py:366)
-- [main.py](c:\Users\minch\project\opc-lab\backend\app\main.py:592)
+- [models.py](c:\Users\minch\project\litopc\backend\app\models.py:64)
+- [main.py](c:\Users\minch\project\litopc\backend\app\main.py:366)
+- [main.py](c:\Users\minch\project\litopc\backend\app\main.py:592)
 
 Acceptance:
 - Forging `plan=PRO` in request body no longer unlocks Pro features.
@@ -77,7 +77,7 @@ Backend tasks:
 - Keep existing quota behavior and API response shape.
 
 Current in-memory locations:
-- [main.py](c:\Users\minch\project\opc-lab\backend\app\main.py:88)
+- [main.py](c:\Users\minch\project\litopc\backend\app\main.py:88)
 
 Acceptance:
 - Server restart does not reset daily counters.

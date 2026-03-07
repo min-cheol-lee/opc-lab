@@ -8,7 +8,7 @@ Date: 2026-02-25
 - Validate upgrade flow using billing stub + webhook mock.
 
 ## 2) Required backend env (staging)
-- `OPCLAB_ADMIN_TOKEN=<strong-secret>`
+- `LITOPC_ADMIN_TOKEN=<strong-secret>`
 - `AUTH_REQUIRED=0`
 - `AUTH_ALLOW_HEADER_USER=1`
 - `AUTH_ENFORCE_ALLOWLIST=1`
@@ -25,20 +25,20 @@ $api = "https://your-backend-staging.example.com"
 Invoke-RestMethod `
   -Method POST `
   -Uri "$api/admin/invites/set" `
-  -Headers @{ "x-opclab-admin-token" = $admin } `
+  -Headers @{ "x-litopc-admin-token" = $admin } `
   -ContentType "application/json" `
   -Body '{"email":"alice@example.com","role":"tester","plan_default":"FREE","expires_in_days":14}'
 ```
 
 ## 4) Tester login flow (browser)
 1. Open:
-   - `https://your-frontend-staging.example.com/opclab/internal-login`
+   - `https://your-frontend-staging.example.com/litopc/internal-login`
 2. Fill:
    - `Tester User ID` (example: `tester-alice`)
    - `Tester Email` (must match invited email, example: `alice@example.com`)
    - `JWT Access Token` keep empty in current internal mode
 3. Click `Save & Open Simulator`.
-4. Simulator opens at `/opclab` with identity headers from local storage.
+4. Simulator opens at `/litopc` with identity headers from local storage.
 
 ## 5) Verify account state in simulator
 - In the left account card:
@@ -53,8 +53,8 @@ Invoke-RestMethod `
   -Method GET `
   -Uri "$api/entitlements/me" `
   -Headers @{
-    "x-opclab-user-id" = "tester-alice"
-    "x-opclab-email"   = "alice@example.com"
+    "x-litopc-user-id" = "tester-alice"
+    "x-litopc-email"   = "alice@example.com"
   }
 ```
 
@@ -63,21 +63,21 @@ Invoke-RestMethod `
 Invoke-RestMethod `
   -Method POST `
   -Uri "$api/admin/entitlements/set" `
-  -Headers @{ "x-opclab-admin-token" = $admin } `
+  -Headers @{ "x-litopc-admin-token" = $admin } `
   -ContentType "application/json" `
   -Body '{"user_id":"hdr:tester-alice","plan":"PRO","source":"internal_test","pro_days":14}'
 ```
 
 ## 7) Billing upgrade test (stub mode)
 1. In simulator account card, click `Upgrade`.
-2. Checkout stub session is created and browser returns to `/opclab`.
+2. Checkout stub session is created and browser returns to `/litopc`.
 3. Finalize entitlement with webhook mock:
 
 ```powershell
 Invoke-RestMethod `
   -Method POST `
   -Uri "$api/billing/webhook/mock" `
-  -Headers @{ "x-opclab-admin-token" = $admin } `
+  -Headers @{ "x-litopc-admin-token" = $admin } `
   -ContentType "application/json" `
   -Body '{"user_id":"hdr:tester-alice","event_type":"invoice.paid","status":"active","period_days":30}'
 ```
@@ -90,7 +90,7 @@ Invoke-RestMethod `
 Invoke-RestMethod `
   -Method POST `
   -Uri "$api/billing/webhook/mock" `
-  -Headers @{ "x-opclab-admin-token" = $admin } `
+  -Headers @{ "x-litopc-admin-token" = $admin } `
   -ContentType "application/json" `
   -Body '{"user_id":"hdr:tester-alice","event_type":"customer.subscription.deleted"}'
 ```

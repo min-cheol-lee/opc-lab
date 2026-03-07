@@ -12,10 +12,9 @@ from typing import Literal, TypedDict
 from .models import Plan, ProductEventName, UsageOp
 
 _DB_PATH = Path(
-    os.getenv(
-        "OPCLAB_DB_PATH",
-        str(Path(__file__).resolve().parent.parent / "opclab.db"),
-    )
+    os.getenv("LITOPC_DB_PATH")
+    or os.getenv("OPCLAB_DB_PATH")
+    or str(Path(__file__).resolve().parent.parent / "litopc.db")
 )
 _INIT_LOCK = Lock()
 _INITIALIZED = False

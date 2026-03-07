@@ -1,4 +1,4 @@
-﻿# OPC Lab Product Direction (Revenue + Reputation)
+# litopc Product Direction (Revenue + Reputation)
 
 ## 1. Positioning (recommended)
 - Primary message:

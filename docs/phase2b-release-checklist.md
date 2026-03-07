@@ -25,7 +25,7 @@ Scope: benchmark integrity, change-log discipline, and trust dashboard readiness
 
 ## 4) Trust Dashboard
 - [ ] API check: `GET /trust/benchmarks/trend?limit=20` returns `latest` + `trend`.
-- [ ] UI check: `/opclab/trust-dashboard` renders latest metrics and case status table.
+- [ ] UI check: `/litopc/trust-dashboard` renders latest metrics and case status table.
 - [ ] No 500/parse errors when history is empty.
 
 ## 5) Gate B Decision

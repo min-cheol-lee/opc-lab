@@ -3,7 +3,8 @@ import { getAccessToken, getDevEmail, getDevUserId } from "./auth";
 import { getApiBase } from "./api-base";
 
 const API_BASE = getApiBase();
-const CLIENT_ID_KEY = "opclab_client_id_v1";
+const CLIENT_ID_KEY = "litopc_client_id_v1";
+const LEGACY_CLIENT_ID_KEY = "opclab_client_id_v1";
 
 export type UsageOp = "runs" | "sweep_points" | "exports";
 
@@ -56,26 +57,26 @@ export type CurrentEntitlementResponse = {
 
 export function getOrCreateClientId(): string {
   if (typeof window === "undefined") return "server";
-  const existing = window.localStorage.getItem(CLIENT_ID_KEY);
+  const existing = window.localStorage.getItem(CLIENT_ID_KEY) ?? window.localStorage.getItem(LEGACY_CLIENT_ID_KEY);
   if (existing) return existing;
-  const id = `opc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const id = `litopc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   window.localStorage.setItem(CLIENT_ID_KEY, id);
   return id;
 }
 
 export function clientHeaders(extra?: Record<string, string>): Record<string, string> {
-  const base: Record<string, string> = { "x-opclab-client-id": getOrCreateClientId() };
+  const base: Record<string, string> = { "x-litopc-client-id": getOrCreateClientId() };
   const token = getAccessToken();
   if (token) {
     base.Authorization = `Bearer ${token}`;
   }
   const userId = getDevUserId();
   if (userId) {
-    base["x-opclab-user-id"] = userId;
+    base["x-litopc-user-id"] = userId;
   }
   const email = getDevEmail();
   if (email) {
-    base["x-opclab-email"] = email;
+    base["x-litopc-email"] = email;
   }
   return extra ? { ...base, ...extra } : base;
 }

@@ -76,7 +76,7 @@ from .store import (
 from .sim.presets import PRESETS
 from .sim.pipeline import run_simulation
 
-app = FastAPI(title="OPC Lab API", version="0.1.0")
+app = FastAPI(title="litopc API", version="0.1.0")
 
 # Product toggle: keep disabled for now, easy to re-enable later.
 ENABLE_ADVANCED_CORNER_TEMPLATES = False
@@ -84,8 +84,6 @@ ENABLE_ADVANCED_CORNER_TEMPLATES = False
 DISABLED_TEMPLATES = {
     "LINE_END_RAW",
     "LINE_END_OPC_HAMMER",
-    "L_CORNER_RAW",
-    "L_CORNER_OPC_SERIF",
     "L_CORNER",
 }
 
@@ -120,6 +118,22 @@ _PRODUCT_EVENT_NAMES: tuple[ProductEventName, ...] = (
     "upgrade_prompt_viewed",
     "upgrade_prompt_clicked",
 )
+
+
+def _env_first(*names: str, default: str = "") -> str:
+    for name in names:
+        value = (os.getenv(name, "") or "").strip()
+        if value:
+            return value
+    return default
+
+
+def _request_header_first(request: Request, *names: str) -> str | None:
+    for name in names:
+        value = request.headers.get(name)
+        if value:
+            return value
+    return None
 
 if os.getenv("ENV", "development").lower() == "production":
     allow_origins = [
@@ -163,7 +177,7 @@ def _bootstrap_local_master_pro() -> None:
         source="local_bootstrap_master",
         pro_expires_at_utc=None,
     )
-    email = (os.getenv("LOCAL_BOOTSTRAP_MASTER_EMAIL", "master@opc-lab") or "").strip().lower()
+    email = (os.getenv("LOCAL_BOOTSTRAP_MASTER_EMAIL", "master@litopc") or "").strip().lower()
     if "@" in email:
         set_invite_allowlist(
             email=email,
@@ -194,10 +208,10 @@ def _cors_json_response(request: Request, status_code: int, detail: str) -> JSON
     return resp
 
 def _has_valid_admin_token(request: Request) -> bool:
-    expected = os.getenv("OPCLAB_ADMIN_TOKEN", "").strip()
+    expected = _env_first("LITOPC_ADMIN_TOKEN", "OPCLAB_ADMIN_TOKEN")
     if not expected:
         return False
-    given = (request.headers.get("x-opclab-admin-token") or "").strip()
+    given = (_request_header_first(request, "x-litopc-admin-token", "x-opclab-admin-token") or "").strip()
     if not given:
         return False
     return hmac.compare_digest(given, expected)
@@ -234,27 +248,27 @@ async def auth_identity_middleware(request: Request, call_next):
                     pro_expires_at_utc=invite["expires_at_utc"],
                 )
             mark_invite_used(email)
-    request.state.opclab_user_id = identity.user_id
-    request.state.opclab_auth_source = identity.source
-    request.state.opclab_authenticated = identity.authenticated
-    request.state.opclab_email = identity.email
+    request.state.litopc_user_id = identity.user_id
+    request.state.litopc_auth_source = identity.source
+    request.state.litopc_authenticated = identity.authenticated
+    request.state.litopc_email = identity.email
     response = await call_next(request)
-    response.headers.setdefault("X-OPCLAB-USER-ID", identity.user_id)
-    response.headers.setdefault("X-OPCLAB-AUTH-SOURCE", identity.source)
+    response.headers.setdefault("X-LITOPC-USER-ID", identity.user_id)
+    response.headers.setdefault("X-LITOPC-AUTH-SOURCE", identity.source)
     return response
 
 @app.middleware("http")
 async def entitlement_middleware(request: Request, call_next):
     client_id = _resolve_client_id(request)
     response = await call_next(request)
-    response.headers.setdefault("X-OPCLAB-ENTITLEMENT-VERSION", ENTITLEMENT_VERSION)
-    response.headers.setdefault("X-OPCLAB-CLIENT-ID", client_id)
+    response.headers.setdefault("X-LITOPC-ENTITLEMENT-VERSION", ENTITLEMENT_VERSION)
+    response.headers.setdefault("X-LITOPC-CLIENT-ID", client_id)
     return response
 
 @app.get("/")
 def root():
     return {
-        "message": "OPC Lab API is running. Visit /docs for Swagger UI. Health: /health, Presets: /presets"
+        "message": "litopc API is running. Visit /docs for Swagger UI. Health: /health, Presets: /presets"
     }
 
 @app.get("/health")
@@ -335,28 +349,28 @@ def _sanitize_client_id(raw: str | None) -> str:
     return cleaned[:72]
 
 def _resolve_client_id(request: Request) -> str:
-    cached = getattr(request.state, "opclab_client_id", None)
+    cached = getattr(request.state, "litopc_client_id", None)
     if isinstance(cached, str) and cached:
         return cached
-    header = _sanitize_client_id(request.headers.get("x-opclab-client-id"))
+    header = _sanitize_client_id(_request_header_first(request, "x-litopc-client-id", "x-opclab-client-id"))
     if header:
-        request.state.opclab_client_id = header
+        request.state.litopc_client_id = header
         return header
     host = request.client.host if request.client else "anon"
     fallback = f"ip:{host}"
-    request.state.opclab_client_id = fallback
+    request.state.litopc_client_id = fallback
     return fallback
 
 def _resolve_user_id(request: Request) -> str:
-    cached = getattr(request.state, "opclab_user_id", None)
+    cached = getattr(request.state, "litopc_user_id", None)
     if isinstance(cached, str) and cached:
         return cached
     # Function-level calls (tests/smoke) can bypass middleware.
     identity = resolve_auth_identity(request)
-    request.state.opclab_user_id = identity.user_id
-    request.state.opclab_auth_source = identity.source
-    request.state.opclab_authenticated = identity.authenticated
-    request.state.opclab_email = identity.email
+    request.state.litopc_user_id = identity.user_id
+    request.state.litopc_auth_source = identity.source
+    request.state.litopc_authenticated = identity.authenticated
+    request.state.litopc_email = identity.email
     return identity.user_id
 
 def _resolve_actor_id(request: Request) -> str:
@@ -502,10 +516,10 @@ def _load_trust_history(limit: int) -> tuple[list[BenchmarkTrendPoint], int]:
     return points, total
 
 def _require_admin_token(request: Request) -> None:
-    expected = os.getenv("OPCLAB_ADMIN_TOKEN", "").strip()
+    expected = _env_first("LITOPC_ADMIN_TOKEN", "OPCLAB_ADMIN_TOKEN")
     if not expected:
         raise HTTPException(status_code=503, detail="Admin token is not configured.")
-    given = (request.headers.get("x-opclab-admin-token") or "").strip()
+    given = (_request_header_first(request, "x-litopc-admin-token", "x-opclab-admin-token") or "").strip()
     if given != expected:
         raise HTTPException(status_code=403, detail="Admin token is invalid.")
 
@@ -761,7 +775,7 @@ def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
     user_id = _resolve_user_id(request)
     success_url = _validate_return_url(payload.success_url, "success_url")
     cancel_url = _validate_return_url(payload.cancel_url, "cancel_url")
-    email = getattr(request.state, "opclab_email", None)
+    email = getattr(request.state, "litopc_email", None)
     customer = get_billing_customer_by_user(user_id)
     if customer is None:
         customer = upsert_billing_customer(user_id=user_id, stripe_customer_id=_mock_customer_id(user_id), email=email)
@@ -777,7 +791,7 @@ def billing_checkout_session(payload: BillingCheckoutRequest, request: Request):
     )
     redirect_url = _append_query_params(
         success_url,
-        {"opclab_checkout": "stub", "session_id": session_id, "user": user_id},
+        {"litopc_checkout": "stub", "session_id": session_id, "user": user_id},
     )
     _record_policy_audit(
         endpoint="/billing/checkout/session",
@@ -807,7 +821,7 @@ def billing_portal_session(payload: BillingPortalRequest, request: Request):
         raise HTTPException(status_code=400, detail="No billing customer exists for this user yet.")
     url = _append_query_params(
         return_url,
-        {"opclab_portal": "stub", "customer_id": customer["stripe_customer_id"], "user": user_id},
+        {"litopc_portal": "stub", "customer_id": customer["stripe_customer_id"], "user": user_id},
     )
     _record_policy_audit(
         endpoint="/billing/portal/session",
@@ -1057,7 +1071,7 @@ def simulate(req: SimRequest, request: Request):
             reason="Request plan overridden by server entitlement.",
             meta={"requested_plan": requested_plan, "effective_plan": effective_plan},
         )
-    usage_kind = (request.headers.get("x-opclab-usage-kind") or "run").strip().lower()
+    usage_kind = (_request_header_first(request, "x-litopc-usage-kind", "x-opclab-usage-kind") or "run").strip().lower()
     op: UsageOp = "sweep_points" if usage_kind == "sweep-point" else "runs"
     allowed, _, status, reason = _consume_usage_quota(policy_req.plan, actor_id, op, 1, clamp=False)
     if not allowed:
@@ -1073,7 +1087,7 @@ def simulate(req: SimRequest, request: Request):
         raise HTTPException(
             status_code=429,
             detail=reason or f"Daily {op} quota exceeded.",
-            headers={"X-OPCLAB-USAGE-REMAINING": str(status.remaining[op])},
+            headers={"X-LITOPC-USAGE-REMAINING": str(status.remaining[op])},
         )
     _record_policy_audit(
         endpoint="/simulate",
@@ -1159,7 +1173,7 @@ def simulate_batch(batch: BatchSimRequest, request: Request):
         raise HTTPException(
             status_code=429,
             detail=reason or "Daily sweep_points quota exceeded.",
-            headers={"X-OPCLAB-USAGE-REMAINING": str(status.remaining["sweep_points"])},
+            headers={"X-LITOPC-USAGE-REMAINING": str(status.remaining["sweep_points"])},
         )
     if granted < len(values):
         before_quota = len(values)

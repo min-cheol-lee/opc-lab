@@ -18,7 +18,7 @@ Scope: Funnel + quota behavior instrumentation for revenue monitoring.
 - `upgrade_prompt_clicked`
 
 ## Emission Paths
-- Main simulation flow: `frontend/app/opclab/page.tsx`
+- Main simulation flow: `frontend/app/litopc/page.tsx`
 - Export actions from viewport toolbar: `frontend/components/Viewport.tsx`
 - Upgrade prompt view/click in locked UI: `frontend/components/ControlPanel.tsx`
 - Queue + flush to backend ingest: `frontend/lib/telemetry.ts`

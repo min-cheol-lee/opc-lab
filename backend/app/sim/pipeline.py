@@ -31,6 +31,8 @@ def _requested_cd_nm(req: SimRequest) -> float | None:
     if req.mask.mode == "CUSTOM":
         dims: list[float] = []
         for s in req.mask.shapes or []:
+            if getattr(s, "op", "add") == "subtract":
+                continue
             stype = getattr(s, "type", "rect")
             if stype == "rect":
                 w = float(getattr(s, "w_nm", 0.0))
@@ -57,7 +59,7 @@ def _requested_cd_nm(req: SimRequest) -> float | None:
     t = req.mask.template_id
     if t in {"CONTACT", "CONTACT_RAW", "CONTACT_OPC_SERIF"}:
         return float(p.get("w_nm", p.get("cd_nm", 0.0))) or None
-    if t == "STAIRCASE":
+    if t in {"STAIRCASE", "STAIRCASE_OPC"}:
         return float(p.get("thickness_nm", p.get("cd_nm", 0.0))) or None
     return float(p.get("cd_nm", 0.0)) or None
 
@@ -69,10 +71,28 @@ def _feature_span_ratio(shapes, fov_nm: float) -> float:
     """
     if not shapes:
         return 1.0
-    min_x = min(float(s.x_nm) for s in shapes)
-    min_y = min(float(s.y_nm) for s in shapes)
-    max_x = max(float(s.x_nm + s.w_nm) for s in shapes)
-    max_y = max(float(s.y_nm + s.h_nm) for s in shapes)
+    boxes: list[tuple[float, float, float, float]] = []
+    for s in shapes:
+        stype = getattr(s, "type", "rect")
+        if stype == "rect":
+            boxes.append((
+                float(s.x_nm),
+                float(s.y_nm),
+                float(s.x_nm + s.w_nm),
+                float(s.y_nm + s.h_nm),
+            ))
+        elif stype == "polygon":
+            pts = getattr(s, "points_nm", []) or []
+            xs = [float(getattr(p, "x_nm", 0.0)) for p in pts]
+            ys = [float(getattr(p, "y_nm", 0.0)) for p in pts]
+            if xs and ys:
+                boxes.append((min(xs), min(ys), max(xs), max(ys)))
+    if not boxes:
+        return 1.0
+    min_x = min(box[0] for box in boxes)
+    min_y = min(box[1] for box in boxes)
+    max_x = max(box[2] for box in boxes)
+    max_y = max(box[3] for box in boxes)
     span = max(max_x - min_x, max_y - min_y)
     return float(span / max(float(fov_nm), 1e-6))
 
@@ -100,7 +120,8 @@ def run_simulation(req: SimRequest) -> SimResponse:
 
     # 1) Build shapes (TEMPLATE -> shapes) or use CUSTOM shapes
     if req.mask.mode == "TEMPLATE":
-        shapes, fov_nm = template_to_shapes(req.mask.template_id, req.mask.params_nm)
+        base_shapes, fov_nm = template_to_shapes(req.mask.template_id, req.mask.params_nm)
+        shapes = [*base_shapes, *(req.mask.shapes or [])]
     else:
         shapes = req.mask.shapes
         fov_nm = req.mask.params_nm.get("fov_nm", 1100.0)  # fallback

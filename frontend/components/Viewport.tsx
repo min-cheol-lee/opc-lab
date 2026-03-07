@@ -1,6 +1,8 @@
 ﻿"use client";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { BatchSimResponse, MaskShape, RunRecord, SimRequest, SimResponse, SweepParam } from "../lib/types";
+import type { EditorLayer, EditorTool, TargetGuide, TargetScoreMetrics } from "../lib/opc-workspace";
+import { getShapeOp } from "../lib/opc-workspace";
 import { exportPngWithMeta, exportRunsCsv, exportSvgWithMeta, type ExportSweepPayload } from "../lib/export";
 import { consumeUsage } from "../lib/usage";
 import { trackProductEvent } from "../lib/telemetry";
@@ -18,23 +20,32 @@ type TrustPresetInfo = {
 };
 
 const TRUST_PRESET_INFO: Record<SimRequest["preset_id"], TrustPresetInfo> = {
-  DUV_193_DRY: { title: "DUV 193 Dry", wavelengthNm: 193.0, na: 0.93, k1: 0.28 },
-  DUV_193_IMM: { title: "DUV 193 Immersion", wavelengthNm: 193.0, na: 1.35, k1: 0.26 },
-  EUV_LNA: { title: "EUV Low-NA 0.33", wavelengthNm: 13.5, na: 0.33, k1: 0.3 },
-  EUV_HNA: { title: "EUV High-NA 0.55", wavelengthNm: 13.5, na: 0.55, k1: 0.26 },
+  DUV_193_DRY: { title: "DUV | 193 nm Dry", wavelengthNm: 193.0, na: 0.93, k1: 0.28 },
+  DUV_193_IMM: { title: "DUV | 193 nm Immersion", wavelengthNm: 193.0, na: 1.35, k1: 0.26 },
+  EUV_LNA: { title: "EUV | 13.5 nm Low-NA", wavelengthNm: 13.5, na: 0.33, k1: 0.3 },
+  EUV_HNA: { title: "EUV | 13.5 nm High-NA", wavelengthNm: 13.5, na: 0.55, k1: 0.26 },
 };
 
 export function Viewport(props: {
   sim: SimResponse | null;
   req: SimRequest;
+  editDock?: React.ReactNode;
+  resolvedMaskShapes?: Array<MaskShape>;
   runHistory?: RunRecord[];
-  onCustomShapesChange?: (shapes: Array<MaskShape>) => void;
+  editableShapes?: Array<MaskShape>;
+  onEditableShapesChange?: (shapes: Array<MaskShape>) => void;
+  presetAnchorShapes?: Array<Extract<MaskShape, { type: "rect" }>>;
+  selectedPresetAnchorIndex?: number;
+  onSelectPresetAnchor?: (i: number) => void;
   selectedCustomShapeIndex?: number;
   selectedCustomShapeIndexes?: number[];
   onSelectCustomShape?: (i: number, additive?: boolean) => void;
-  drawRectMode?: boolean;
-  onSetDrawRectMode?: (v: boolean) => void;
+  activeEditLayer?: EditorLayer;
+  editorTool?: EditorTool;
   onAddCustomRectFromDrag?: (rect: { x_nm: number; y_nm: number; w_nm: number; h_nm: number }) => void;
+  onPlaceSrafAtPoint?: (point: { x_nm: number; y_nm: number }) => void;
+  targetGuide?: TargetGuide | null;
+  targetMetrics?: TargetScoreMetrics | null;
   compareActive?: boolean;
   compareALabel?: string | null;
   compareBLabel?: string | null;
@@ -48,19 +59,34 @@ export function Viewport(props: {
   sweepCompareB?: BatchSimResponse | null;
   sweepCompareALabel?: string | null;
   sweepCompareBLabel?: string | null;
+  panelLayoutMode?: "side" | "overlay";
+  showEditDockPanel?: boolean;
+  showSurfacePanel?: boolean;
+  showMetricsFooter?: boolean;
+  canvasModeHud?: React.ReactNode;
+  canvasLeftInset?: number;
   onUsageConsumed?: () => void;
 }) {
   const {
     sim,
     req,
+    editDock = null,
+    resolvedMaskShapes,
     runHistory = [],
-    onCustomShapesChange,
+    editableShapes = [],
+    onEditableShapesChange,
+    presetAnchorShapes = [],
+    selectedPresetAnchorIndex = 0,
+    onSelectPresetAnchor,
     selectedCustomShapeIndex = -1,
     selectedCustomShapeIndexes = [],
     onSelectCustomShape,
-    drawRectMode = false,
-    onSetDrawRectMode,
+    activeEditLayer = "MASK",
+    editorTool = "SELECT",
     onAddCustomRectFromDrag,
+    onPlaceSrafAtPoint,
+    targetGuide = null,
+    targetMetrics = null,
     compareActive = false,
     compareALabel = null,
     compareBLabel = null,
@@ -74,18 +100,36 @@ export function Viewport(props: {
     sweepCompareB = null,
     sweepCompareALabel = null,
     sweepCompareBLabel = null,
+    panelLayoutMode = "side",
+    showEditDockPanel = true,
+    showSurfacePanel = true,
+    showMetricsFooter = true,
+    canvasModeHud = null,
+    canvasLeftInset = 0,
     onUsageConsumed,
   } = props;
   type RulerKey = "mask" | "contour";
+  type RulerAxis = "H" | "V";
+  type RulerDragTarget =
+    | "mask-start"
+    | "mask-end"
+    | "mask-line"
+    | "contour-start"
+    | "contour-end"
+    | "contour-line";
   type SnapMode = "AUTO" | "OFF" | "MASK" | "CONTOUR";
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
   const [showLegend, setShowLegend] = useState(true);
   const [showRulers, setShowRulers] = useState(true);
+  const [rulerAxis, setRulerAxis] = useState<RulerAxis>("H");
   const [showMainContour, setShowMainContour] = useState(true);
+  const [showTargetOverlay, setShowTargetOverlay] = useState(true);
   const [showAerial, setShowAerial] = useState(true);
   const [showSurface3d, setShowSurface3d] = useState(true);
+  const [showSurfaceControls, setShowSurfaceControls] = useState(false);
+  const [surfaceSwapMain, setSurfaceSwapMain] = useState(false);
   const [compareContourMode, setCompareContourMode] = useState<"MIXED" | "AB_ONLY">("AB_ONLY");
   const [showSweepOverlay, setShowSweepOverlay] = useState(true);
   const [sweepStackAll, setSweepStackAll] = useState(true);
@@ -103,6 +147,8 @@ export function Viewport(props: {
   const [dragging, setDragging] = useState(false);
   const [maskRuler, setMaskRuler] = useState<{ x0: number; x1: number; y: number } | null>(null);
   const [contourRuler, setContourRuler] = useState<{ x0: number; x1: number; y: number } | null>(null);
+  const maskRulerRef = useRef<{ x0: number; x1: number; y: number } | null>(null);
+  const contourRulerRef = useRef<{ x0: number; x1: number; y: number } | null>(null);
   const [heatmapUrl, setHeatmapUrl] = useState<string | null>(null);
   const [surfaceQuality, setSurfaceQuality] = useState<"FAST" | "FULL">("FULL");
   const dragStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
@@ -115,7 +161,7 @@ export function Viewport(props: {
   >(null);
   const surfaceQualityTimerRef = useRef<number | null>(null);
   const rulerDragRef = useRef<{
-    target: "mask-left" | "mask-right" | "mask-line" | "contour-left" | "contour-right" | "contour-line";
+    target: RulerDragTarget;
     x: number;
     y: number;
     start: { x0: number; x1: number; y: number };
@@ -133,10 +179,14 @@ export function Viewport(props: {
   } | null>(null);
   const customRectCreateRef = useRef<{ x: number; y: number } | null>(null);
   const [customRectDraft, setCustomRectDraft] = useState<{ x_nm: number; y_nm: number; w_nm: number; h_nm: number } | null>(null);
+  const [srafHintPoint, setSrafHintPoint] = useState<{ x: number; y: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const canvasCommandRef = useRef<HTMLDivElement | null>(null);
+  const [canvasCommandHeight, setCanvasCommandHeight] = useState(86);
   const templateId = req.mask.template_id ?? "";
   const paramsSignature = JSON.stringify(req.mask.params_nm ?? {});
-  const customShapesSignature = JSON.stringify(req.mask.shapes ?? []);
+  const maskShapesSignature = JSON.stringify(req.mask.shapes ?? []);
+  const editableShapesSignature = JSON.stringify(editableShapes ?? []);
   const contourLockedByCompare = compareActive && compareContourMode === "AB_ONLY";
   const effectiveShowMainContour = showMainContour && !contourLockedByCompare;
   const fovNm = useMemo(() => {
@@ -154,20 +204,92 @@ export function Viewport(props: {
       `${trustPreset.title} · k1=${trustPreset.k1.toFixed(2)} · λ=${trustPreset.wavelengthNm.toFixed(1)} nm · NA=${trustPreset.na.toFixed(2)} · CDmin~${trustCdMinNm.toFixed(1)} nm`,
     [trustPreset, trustCdMinNm]
   );
-  const maskRects = useMemo(() => maskRectsFromTemplate(req, fovNm), [templateId, paramsSignature, fovNm, req.mask.mode, customShapesSignature]);
-  const maskPath = useMemo(() => maskPathFromRequest(req, fovNm), [templateId, paramsSignature, fovNm, req.mask.mode, customShapesSignature]);
-  const customShapePaths = useMemo(
-    () => (req.mask.mode === "CUSTOM" ? (req.mask.shapes ?? []).map((s) => maskShapeToPath(s, fovNm)) : []),
-    [req.mask.mode, customShapesSignature, fovNm]
+  const templateMaskRects = useMemo(
+    () => (req.mask.mode === "TEMPLATE" ? maskRectsFromTemplate({ ...req, mask: { ...req.mask, shapes: [] } }, fovNm) : []),
+    [req, fovNm],
+  );
+  const targetOverlayPath = useMemo(
+    () => (targetGuide ? targetGuide.targetShapes.map((shape) => maskShapeToPath(shape, fovNm)).join(" ") : ""),
+    [targetGuide, fovNm],
+  );
+  const targetContours = useMemo(
+    () => targetGuide?.targetContours ?? [],
+    [targetGuide],
+  );
+  const editableShapePaths = useMemo(
+    () => editableShapes.map((shape) => maskShapeToPath(shape, fovNm)),
+    [editableShapesSignature, editableShapes, fovNm]
+  );
+  const maskBaseShapes = useMemo(() => (
+    resolvedMaskShapes
+      ? resolvedMaskShapes
+      : req.mask.mode === "CUSTOM"
+      ? (req.mask.shapes ?? [])
+      : [
+          ...rectsToMaskShapes(templateMaskRects),
+          ...(req.mask.shapes ?? []),
+        ]
+  ), [resolvedMaskShapes, req.mask.mode, req.mask.shapes, templateMaskRects]);
+  const overlayEditShapes = useMemo(
+    () => (req.mask.mode === "TEMPLATE" ? (req.mask.shapes ?? []) : editableShapes),
+    [req.mask.mode, req.mask.shapes, editableShapes],
+  );
+  const maskAddShapes = useMemo(
+    () => maskBaseShapes.filter((shape) => getShapeOp(shape) !== "subtract"),
+    [maskBaseShapes],
+  );
+  const maskSubtractShapes = useMemo(
+    () => maskBaseShapes.filter((shape) => getShapeOp(shape) === "subtract"),
+    [maskBaseShapes],
+  );
+  const overlayAddShapes = useMemo(
+    () => overlayEditShapes.filter((shape) => getShapeOp(shape) !== "subtract"),
+    [overlayEditShapes],
+  );
+  const maskAddPaths = useMemo(
+    () => maskAddShapes.map((shape) => maskShapeToPath(shape, fovNm)),
+    [maskAddShapes, fovNm],
+  );
+  const maskSubtractPaths = useMemo(
+    () => maskSubtractShapes.map((shape) => maskShapeToPath(shape, fovNm)),
+    [maskSubtractShapes, fovNm],
+  );
+  const overlayAddPaths = useMemo(
+    () => overlayAddShapes.map((shape) => maskShapeToPath(shape, fovNm)),
+    [overlayAddShapes, fovNm],
+  );
+  const maskAddRects = useMemo(() => shapesToRects(maskAddShapes), [maskAddShapes]);
+  const maskSubtractRects = useMemo(() => shapesToRects(maskSubtractShapes), [maskSubtractShapes]);
+  const overlayAddRects = useMemo(() => shapesToRects(overlayAddShapes), [overlayAddShapes]);
+  const finalMaskContours = useMemo(
+    () => rectBooleanContours(maskAddRects, maskSubtractRects),
+    [maskAddRects, maskSubtractRects],
+  );
+  const finalMaskContourPaths = useMemo(
+    () => finalMaskContours.map((contour) => polylineToPath(contour.points_nm, fovNm)),
+    [finalMaskContours, fovNm],
+  );
+  useEffect(() => {
+    if (editorTool !== "PLACE_SRAF" && srafHintPoint) {
+      setSrafHintPoint(null);
+    }
+  }, [editorTool, srafHintPoint]);
+  const finalMaskCompoundPath = useMemo(
+    () => finalMaskContourPaths.join(" "),
+    [finalMaskContourPaths],
+  );
+  const maskRects = maskAddRects;
+  const presetAnchorPaths = useMemo(
+    () => presetAnchorShapes.map((shape) => maskShapeToPath(shape, fovNm)),
+    [presetAnchorShapes, fovNm],
   );
   const maskBounds = useMemo(() => rectsBoundsSvg(maskRects, fovNm), [maskRects, fovNm]);
   const selectedCustomRect = useMemo(() => {
-    if (req.mask.mode !== "CUSTOM") return null;
-    const s = (req.mask.shapes ?? [])[selectedCustomShapeIndex];
+    const s = editableShapes[selectedCustomShapeIndex];
     if (!s || s.type !== "rect") return null;
     return s;
-  }, [req.mask.mode, customShapesSignature, selectedCustomShapeIndex]);
-  const maskCdNm = useMemo(() => estimateMaskCdNm(req), [templateId, paramsSignature, req.mask.mode, customShapesSignature]);
+  }, [editableShapesSignature, editableShapes, selectedCustomShapeIndex]);
+  const maskCdNm = useMemo(() => estimateMaskCdNm(req, resolvedMaskShapes), [templateId, paramsSignature, req.mask.mode, maskShapesSignature, resolvedMaskShapes]);
   const contourCdNm = sim?.metrics?.cd_nm ?? null;
   // Keep contour styling visually stable across CD/template size.
   const contourUnderWidth = 3.35;
@@ -564,8 +686,13 @@ export function Viewport(props: {
       zoomScale: scale,
       qualityMode: surfaceQuality,
       fovNm,
-      maskRects,
+      maskAddRects,
+      maskSubtractRects,
+      overlayAddRects,
+      finalMaskContours,
       contours: sim?.contours_nm ?? [],
+      targetContours,
+      showTargetOverlay,
       compareActive,
       compareAContours: compareAContours ?? [],
       compareBContours: compareBContours ?? [],
@@ -575,7 +702,7 @@ export function Viewport(props: {
       maskOpacityPreset,
       nmPerPixel: sim?.nm_per_pixel ?? (fovNm / Math.max(1, intensity.w)),
     });
-  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, scale, surfaceQuality, req.plan, showSurface3d, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset]);
+  }, [sim?.intensity, sim?.contours_nm, surfAzimuth, surfElevation, surfRoll, surfOffsetX, surfOffsetY, surfOffsetZ, surfDepth, scale, surfaceQuality, req.plan, showSurface3d, fovNm, compareActive, compareAContours, compareBContours, sweepContourSets3d, effectiveShowMainContour, showAerial, maskOpacityPreset, maskAddRects, maskSubtractRects, overlayAddRects, finalMaskContours, targetContours, showTargetOverlay]);
 
   useEffect(() => {
     const contours = sim?.contours_nm;
@@ -616,20 +743,36 @@ export function Viewport(props: {
   }, [fovNm, templateId, paramsSignature, maskBounds?.minX, maskBounds?.minY, maskBounds?.maxX, maskBounds?.maxY]);
 
   useEffect(() => {
+    maskRulerRef.current = maskRuler;
+  }, [maskRuler]);
+
+  useEffect(() => {
+    contourRulerRef.current = contourRuler;
+  }, [contourRuler]);
+
+  useEffect(() => {
     if (!maskBounds) return;
     const cx = (maskBounds.minX + maskBounds.maxX) * 0.5;
     const maskW = Math.max(1, maskCdNm);
     const yMid = (maskBounds.minY + maskBounds.maxY) * 0.5;
-    setMaskRuler({ x0: cx - maskW * 0.5, x1: cx + maskW * 0.5, y: yMid });
+    const nextMaskBase = maskRulerRef.current
+      ? normalizeRuler(maskRulerRef.current, fovNm)
+      : { x0: cx - maskW * 0.5, x1: cx + maskW * 0.5, y: yMid };
+    const nextMask = snapRulerToRectEdges(nextMaskBase, maskRects, fovNm, rulerAxis);
+    setMaskRuler(nextMask);
 
     const hasContour = !!sim?.contours_nm?.length;
     if (hasContour) {
       const contourW = Math.max(1, contourCdNm ?? maskCdNm);
-      setContourRuler({ x0: cx - contourW * 0.5, x1: cx + contourW * 0.5, y: yMid });
+      const nextContourBase = contourRulerRef.current
+        ? normalizeRuler(contourRulerRef.current, fovNm)
+        : { x0: cx - contourW * 0.5, x1: cx + contourW * 0.5, y: nextMask.y };
+      const nextContour = snapRulerToContourEdges(nextContourBase, sim.contours_nm ?? [], fovNm, rulerAxis, maskRects);
+      setContourRuler(nextContour);
     } else {
       setContourRuler(null);
     }
-  }, [maskBounds, maskCdNm, contourCdNm, sim?.contours_nm]);
+  }, [maskBounds, maskCdNm, contourCdNm, sim?.contours_nm, maskRects, fovNm, rulerAxis]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -650,16 +793,32 @@ export function Viewport(props: {
 
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        applyRuler(selectedRuler, { x0: centerX - width * 0.5 - step, x1: centerX + width * 0.5 - step, y });
+        if (rulerAxis === "H") {
+          applyRuler(selectedRuler, { x0: centerX - width * 0.5 - step, x1: centerX + width * 0.5 - step, y });
+        } else {
+          applyRuler(selectedRuler, { ...base, y: y - step });
+        }
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        applyRuler(selectedRuler, { x0: centerX - width * 0.5 + step, x1: centerX + width * 0.5 + step, y });
+        if (rulerAxis === "H") {
+          applyRuler(selectedRuler, { x0: centerX - width * 0.5 + step, x1: centerX + width * 0.5 + step, y });
+        } else {
+          applyRuler(selectedRuler, { ...base, y: y + step });
+        }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        applyRuler(selectedRuler, { ...base, y: y - step });
+        if (rulerAxis === "H") {
+          applyRuler(selectedRuler, { ...base, y: y - step });
+        } else {
+          applyRuler(selectedRuler, { x0: centerX - width * 0.5 - step, x1: centerX + width * 0.5 - step, y });
+        }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        applyRuler(selectedRuler, { ...base, y: y + step });
+        if (rulerAxis === "H") {
+          applyRuler(selectedRuler, { ...base, y: y + step });
+        } else {
+          applyRuler(selectedRuler, { x0: centerX - width * 0.5 + step, x1: centerX + width * 0.5 + step, y });
+        }
       } else if (e.key === "[" || e.key === "{") {
         e.preventDefault();
         const w = Math.max(1, width - step);
@@ -676,15 +835,14 @@ export function Viewport(props: {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRuler, maskRuler, contourRuler, fovNm, req.mask.mode, selectedCustomShapeIndex, selectedCustomShapeIndexes]);
+  }, [selectedRuler, maskRuler, contourRuler, fovNm, req.mask.mode, selectedCustomShapeIndex, selectedCustomShapeIndexes, rulerAxis]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (req.mask.mode !== "CUSTOM") return;
-      if (!onCustomShapesChange) return;
+      if (!onEditableShapesChange) return;
       const target = e.target as HTMLElement | null;
       if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
-      const shapes = req.mask.shapes ?? [];
+      const shapes = editableShapes;
       const activeIndexes = selectedCustomShapeIndexes.length
         ? selectedCustomShapeIndexes
         : (selectedCustomShapeIndex >= 0 ? [selectedCustomShapeIndex] : []);
@@ -709,7 +867,7 @@ export function Viewport(props: {
         return;
       }
       const set = new Set(activeIndexes);
-      onCustomShapesChange(
+      onEditableShapesChange(
         shapes.map((s, i) => {
           if (!set.has(i) || s.type !== "rect") return s;
           return clampRectToFov({ ...s, x_nm: s.x_nm + dx, y_nm: s.y_nm + dy }, fovNm);
@@ -718,7 +876,7 @@ export function Viewport(props: {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRuler, req.mask.mode, req.mask.shapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onCustomShapesChange, fovNm]);
+  }, [selectedRuler, editableShapes, selectedCustomShapeIndex, selectedCustomShapeIndexes, onEditableShapesChange, fovNm]);
 
   function clampScale(v: number) {
     const safe = Number.isFinite(v) ? v : 1;
@@ -782,11 +940,16 @@ export function Viewport(props: {
 
   function onMouseDown(e: React.MouseEvent<SVGSVGElement>) {
     if (rulerDragRef.current || customShapeDragRef.current || customRectResizeRef.current) return;
-    if (req.mask.mode === "CUSTOM" && drawRectMode && onAddCustomRectFromDrag) {
+    if ((editorTool === "DRAW_ADD_RECT" || editorTool === "DRAW_SUBTRACT_RECT") && onAddCustomRectFromDrag) {
       const p = pointerToMaskNm(e.clientX, e.clientY);
       customRectCreateRef.current = { x: p.x_nm, y: p.y_nm };
       setCustomRectDraft({ x_nm: p.x_nm, y_nm: p.y_nm, w_nm: 1, h_nm: 1 });
       setDragging(true);
+      return;
+    }
+    if (editorTool === "PLACE_SRAF" && onPlaceSrafAtPoint) {
+      const p = pointerToMaskNm(e.clientX, e.clientY);
+      onPlaceSrafAtPoint(p);
       return;
     }
     const p = pointerToSvgUnits(e.clientX, e.clientY);
@@ -795,6 +958,14 @@ export function Viewport(props: {
   }
 
   function onMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (editorTool === "PLACE_SRAF") {
+      const p = pointerToSvgUnits(e.clientX, e.clientY);
+      const clamped = {
+        x: clampNm(p.x, fovNm),
+        y: clampNm(p.y, fovNm),
+      };
+      setSrafHintPoint(clamped);
+    }
     if (customRectCreateRef.current) {
       const p = pointerToMaskNm(e.clientX, e.clientY);
       const s = customRectCreateRef.current;
@@ -805,17 +976,17 @@ export function Viewport(props: {
       setCustomRectDraft({ x_nm, y_nm, w_nm, h_nm });
       return;
     }
-    if (customRectResizeRef.current && onCustomShapesChange) {
+    if (customRectResizeRef.current && onEditableShapesChange) {
       const p = pointerToMaskNm(e.clientX, e.clientY);
       const d = customRectResizeRef.current;
       const next = d.startShapes.map((s, i) => {
         if (i !== d.index || s.type !== "rect") return s;
         return resizeRectFromCorner(s, d.corner, p.x_nm, p.y_nm, fovNm);
       });
-      onCustomShapesChange(next);
+      onEditableShapesChange(next);
       return;
     }
-    if (customShapeDragRef.current && onCustomShapesChange) {
+    if (customShapeDragRef.current && onEditableShapesChange) {
       const p = pointerToMaskNm(e.clientX, e.clientY);
       const d = customShapeDragRef.current;
       const dx = p.x_nm - d.x;
@@ -827,7 +998,7 @@ export function Viewport(props: {
         if (moved.type === "rect") return clampRectToFov(moved, fovNm);
         return moved;
       });
-      onCustomShapesChange(next);
+      onEditableShapesChange(next);
       return;
     }
     if (rulerDragRef.current) {
@@ -837,14 +1008,26 @@ export function Viewport(props: {
       const dy = p.y - d.y;
       if (d.target.startsWith("mask") && maskRuler) {
         const base = d.start;
-        if (d.target === "mask-left") setMaskRuler({ ...maskRuler, x0: clampNm(base.x0 + dx, fovNm) });
-        else if (d.target === "mask-right") setMaskRuler({ ...maskRuler, x1: clampNm(base.x1 + dx, fovNm) });
-        else setMaskRuler({ x0: clampNm(base.x0 + dx, fovNm), x1: clampNm(base.x1 + dx, fovNm), y: clampNm(base.y + dy, fovNm) });
+        if (rulerAxis === "H") {
+          if (d.target === "mask-start") setMaskRuler({ ...maskRuler, x0: clampNm(base.x0 + dx, fovNm) });
+          else if (d.target === "mask-end") setMaskRuler({ ...maskRuler, x1: clampNm(base.x1 + dx, fovNm) });
+          else setMaskRuler({ x0: clampNm(base.x0 + dx, fovNm), x1: clampNm(base.x1 + dx, fovNm), y: clampNm(base.y + dy, fovNm) });
+        } else {
+          if (d.target === "mask-start") setMaskRuler({ ...maskRuler, x0: clampNm(base.x0 + dy, fovNm) });
+          else if (d.target === "mask-end") setMaskRuler({ ...maskRuler, x1: clampNm(base.x1 + dy, fovNm) });
+          else setMaskRuler({ x0: clampNm(base.x0 + dy, fovNm), x1: clampNm(base.x1 + dy, fovNm), y: clampNm(base.y + dx, fovNm) });
+        }
       } else if (d.target.startsWith("contour") && contourRuler) {
         const base = d.start;
-        if (d.target === "contour-left") setContourRuler({ ...contourRuler, x0: clampNm(base.x0 + dx, fovNm) });
-        else if (d.target === "contour-right") setContourRuler({ ...contourRuler, x1: clampNm(base.x1 + dx, fovNm) });
-        else setContourRuler({ x0: clampNm(base.x0 + dx, fovNm), x1: clampNm(base.x1 + dx, fovNm), y: clampNm(base.y + dy, fovNm) });
+        if (rulerAxis === "H") {
+          if (d.target === "contour-start") setContourRuler({ ...contourRuler, x0: clampNm(base.x0 + dx, fovNm) });
+          else if (d.target === "contour-end") setContourRuler({ ...contourRuler, x1: clampNm(base.x1 + dx, fovNm) });
+          else setContourRuler({ x0: clampNm(base.x0 + dx, fovNm), x1: clampNm(base.x1 + dx, fovNm), y: clampNm(base.y + dy, fovNm) });
+        } else {
+          if (d.target === "contour-start") setContourRuler({ ...contourRuler, x0: clampNm(base.x0 + dy, fovNm) });
+          else if (d.target === "contour-end") setContourRuler({ ...contourRuler, x1: clampNm(base.x1 + dy, fovNm) });
+          else setContourRuler({ x0: clampNm(base.x0 + dy, fovNm), x1: clampNm(base.x1 + dy, fovNm), y: clampNm(base.y + dx, fovNm) });
+        }
       }
       return;
     }
@@ -866,11 +1049,11 @@ export function Viewport(props: {
     if (!base) return;
     let snapped = base;
     if (mode === "MASK" || (mode === "AUTO" && which === "mask")) {
-      snapped = snapRulerToRectEdges(base, maskRects, fovNm);
+      snapped = snapRulerToRectEdges(base, maskRects, fovNm, rulerAxis);
     } else if (mode === "CONTOUR" || (mode === "AUTO" && which === "contour")) {
-      if (sim?.contours_nm?.length) snapped = snapRulerToContourEdges(base, sim.contours_nm, fovNm);
+      if (sim?.contours_nm?.length) snapped = snapRulerToContourEdges(base, sim.contours_nm, fovNm, rulerAxis, maskRects);
     } else if (mode === "AUTO" && which === "contour" && sim?.contours_nm?.length) {
-      snapped = snapRulerToContourEdges(base, sim.contours_nm, fovNm);
+      snapped = snapRulerToContourEdges(base, sim.contours_nm, fovNm, rulerAxis, maskRects);
     }
     applyRuler(which, snapped);
   }
@@ -882,7 +1065,6 @@ export function Viewport(props: {
       }
       customRectCreateRef.current = null;
       setCustomRectDraft(null);
-      onSetDrawRectMode?.(false);
     }
     const d = rulerDragRef.current;
     if (d) {
@@ -901,34 +1083,409 @@ export function Viewport(props: {
     if (!sweepResult || sweepPoints.length === 0 || !showSweepOverlay || !activeSweepPoint) return null;
     const prefix = panel === "3d" ? "3D" : "2D";
     return (
-      <div className={`sweep-inline-status ${panel === "3d" ? "sweep-inline-status-3d" : ""}`}>
+      <div className={`sweep-inline-status ${panel === "3d" ? "sweep-inline-status-3d" : ""} ${panel === "2d" && overlayPanelsVisible ? "sweep-inline-status-has-overlay" : ""}`}>
         {prefix} · {sweepResult.param} {activeSweepPoint.value.toFixed(3)} · {sweepIndexClamped + 1}/{sweepPoints.length}
         {activeSweepPoint.metrics.cd_nm == null ? "" : ` · CD ${activeSweepPoint.metrics.cd_nm.toFixed(1)} nm`}
       </div>
     );
   }
 
-  const panelHeight = "clamp(460px, 70vh, 880px)";
+  const twoDPanelHeight = panelLayoutMode === "overlay"
+    ? "100dvh"
+    : "calc(100dvh - 24px)";
+  const allowSurfacePanel = req.plan === "PRO" && showSurfacePanel;
+  const surfacePanelVisible = allowSurfacePanel && showSurface3d;
+  const canSwapSurfaceMain = surfacePanelVisible;
+  const surfaceAsBackground = canSwapSurfaceMain && surfaceSwapMain;
+  const hasEditDock = Boolean(editDock);
+  const editDockVisible = hasEditDock && showEditDockPanel;
+  const bothRightPanelsVisible = surfacePanelVisible && editDockVisible;
+  const surfacePanelHeight = panelLayoutMode === "overlay"
+    ? (bothRightPanelsVisible ? "clamp(248px, 32vh, 392px)" : "clamp(320px, 44vh, 560px)")
+    : (bothRightPanelsVisible ? "clamp(238px, 30vh, 352px)" : "clamp(272px, 35vh, 430px)");
+  const rightRailOccupied = editDockVisible || surfacePanelVisible;
+  const rightRailCollapsed = !rightRailOccupied;
+  const sideSurfaceOverlay = panelLayoutMode === "side" && surfacePanelVisible && !editDockVisible;
+  const useOverlayRail = panelLayoutMode === "overlay" || sideSurfaceOverlay;
+  const workspaceHasRightRail = panelLayoutMode === "side" && rightRailOccupied && !sideSurfaceOverlay;
+  const overlayPanelsVisible = useOverlayRail && rightRailOccupied;
+  const overlayPanelsMounted = useOverlayRail && rightRailOccupied;
+  const isCanvasLayout = panelLayoutMode === "overlay";
+  const sideRailWidth = "342px";
+  const overlayRailWidth = sideRailWidth;
   const viewInvZoom = 1 / Math.max(0.25, Math.min(16, scale || 1));
+  const overlayRailGap = overlayPanelsVisible ? "20px" : "10px";
+  const overlayRailInset = overlayPanelsVisible ? `calc(${overlayRailWidth} + ${overlayRailGap})` : overlayRailGap;
+  const mainCanvasLeftInset = `calc(10px + ${isCanvasLayout ? canvasLeftInset : 0}px)`;
+  const canvasCommandRight = overlayRailInset;
 
-  return (
-    <div className="viewport-frame" style={{ display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
-      <div className="toolbar">
-        <button className="toolbar-pill" onClick={() => zoomAt(scale * 1.2, fovNm / 2, fovNm / 2)}>
-          <ToolbarIcon kind="plus" /> Zoom In
-        </button>
-        <button className="toolbar-pill" onClick={() => zoomAt(scale / 1.2, fovNm / 2, fovNm / 2)}>
-          <ToolbarIcon kind="minus" /> Zoom Out
+  useEffect(() => {
+    if (!canSwapSurfaceMain && surfaceSwapMain) setSurfaceSwapMain(false);
+  }, [canSwapSurfaceMain, surfaceSwapMain]);
+
+  useEffect(() => {
+    if (!surfacePanelVisible && showSurfaceControls) setShowSurfaceControls(false);
+  }, [surfacePanelVisible, showSurfaceControls]);
+
+  useEffect(() => {
+    if (!isCanvasLayout) return;
+    const node = canvasCommandRef.current;
+    if (!node) return;
+
+    const syncHeight = () => {
+      const next = Math.max(52, Math.ceil(node.getBoundingClientRect().height));
+      setCanvasCommandHeight((prev) => (Math.abs(prev - next) < 1 ? prev : next));
+    };
+
+    syncHeight();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(() => syncHeight());
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", syncHeight);
+    return () => window.removeEventListener("resize", syncHeight);
+  }, [isCanvasLayout]);
+
+  const renderSurfacePanel = (slot: "rail" | "main") => {
+    const isMainSurface = slot === "main";
+    const panelTop = isMainSurface ? Math.max(12, canvasCommandHeight + 8) : 10;
+    return (
+      <div
+        className="viewport-panel-shell viewport-panel-shell-3d"
+        style={{
+          position: isMainSurface ? "absolute" : "relative",
+          inset: isMainSurface ? -1 : undefined,
+          border: "none",
+          borderRadius: isMainSurface ? 0 : 16,
+          background: "transparent",
+          boxShadow: "none",
+          overflow: "hidden",
+          height: isMainSurface ? twoDPanelHeight : surfacePanelHeight,
+          display: "flex",
+          flexDirection: "column",
+          isolation: "isolate",
+          zIndex: isMainSurface ? 2 : 1,
+          ["--canvas-left-inset" as any]: `${panelLayoutMode === "overlay" ? canvasLeftInset : 0}px`,
+        }}
+      >
+        {isMainSurface && (
+          <div ref={canvasCommandRef} className={`canvas-command-strip ${overlayPanelsVisible ? "has-overlay-rail" : ""}`} style={{ right: canvasCommandRight }}>
+            <div className="canvas-command-primary">
+              <div className="canvas-command-logo" aria-label="litopc">
+                <span className="canvas-command-logo-lit">lit</span>
+                <span className="canvas-command-logo-opc">opc</span>
+              </div>
+              {canvasModeHud}
+              {canvasToolbar}
+            </div>
+          </div>
+        )}
+        {canSwapSurfaceMain && (
+          <div className="panel-corner-actions" style={isMainSurface ? { top: panelTop + 2 } : undefined}>
+            <button
+              type="button"
+              className={`panel-mini-toggle ${surfaceAsBackground ? "is-active" : ""}`}
+              onClick={() => setSurfaceSwapMain((v) => !v)}
+              title={surfaceAsBackground ? "Swap back to 3D mini" : "Swap 3D to main"}
+              aria-label={surfaceAsBackground ? "Swap back to 3D mini" : "Swap 3D to main"}
+            >
+              2D↔3D
+            </button>
+          </div>
+        )}
+        {!isMainSurface && surfacePanelVisible && (
+          <div className="panel-corner-actions panel-corner-actions-bottom-left">
+            <button
+              type="button"
+              className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
+              onClick={() => setShowSurfaceControls((v) => !v)}
+              title={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
+              aria-label={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
+            >
+              <ToolbarIcon kind="cube" />
+              3D Ctrl
+            </button>
+          </div>
+        )}
+        {!isMainSurface && renderSweepStatusLine("3d")}
+        <div style={{ padding: 0, flex: 1, minHeight: 0, position: "relative", zIndex: 1 }}>
+          <canvas
+            ref={surfaceCanvasRef}
+            style={{
+              width: isMainSurface ? "calc(100% + 2px)" : "100%",
+              height: isMainSurface ? "calc(100% + 2px)" : "100%",
+              marginLeft: isMainSurface ? -1 : 0,
+              marginTop: isMainSurface ? -1 : 0,
+              border: isMainSurface ? "none" : "1px solid rgba(96,108,132,0.4)",
+              borderRadius: isMainSurface ? 0 : 16,
+              background:
+                "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
+              boxShadow: isMainSurface
+                ? "none"
+                : "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
+              cursor: "grab",
+            }}
+            onMouseDown={(e) => {
+              if (e.shiftKey) {
+                surfaceDragRef.current = { mode: "pan", x: e.clientX, y: e.clientY, ox: surfOffsetX, oy: surfOffsetY };
+              } else {
+                surfaceDragRef.current = { mode: "rotate", x: e.clientX, y: e.clientY, az: surfAzimuth, el: surfElevation };
+              }
+              setSurfaceFastMode();
+            }}
+            onMouseMove={(e) => {
+              if (!surfaceDragRef.current) return;
+              const d = surfaceDragRef.current;
+              const dx = e.clientX - d.x;
+              const dy = e.clientY - d.y;
+              if (d.mode === "rotate") {
+                setSurfAzimuth(Math.max(-160, Math.min(160, d.az + dx * 0.3)));
+                setSurfElevation(Math.max(-12, Math.min(85, d.el + dy * 0.22)));
+              } else {
+                setSurfOffsetX(Math.max(-1, Math.min(1, d.ox + dx / 240)));
+                setSurfOffsetY(Math.max(-1, Math.min(1, d.oy + dy / 240)));
+              }
+              setSurfaceFastMode();
+            }}
+            onMouseUp={() => {
+              surfaceDragRef.current = null;
+              scheduleSurfaceFullMode(120);
+            }}
+            onMouseLeave={() => {
+              surfaceDragRef.current = null;
+              scheduleSurfaceFullMode(120);
+            }}
+          />
+          {!sim?.intensity && (
+            <div className="small-note" style={{ marginTop: 6 }}>
+              Run simulation to generate 3D aerial surface.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRightRailPanels = () => (
+    <div
+      className={`viewport-side-stack ${useOverlayRail ? "viewport-side-stack-overlay" : ""} ${editDockVisible && !surfacePanelVisible ? "viewport-side-stack-edit-only" : ""} ${useOverlayRail && editDockVisible && !surfacePanelVisible ? "viewport-side-stack-overlay-edit-only" : ""} ${!editDockVisible && surfacePanelVisible ? "viewport-side-stack-no-edit" : ""} ${rightRailCollapsed ? "is-hidden" : ""}`}
+      style={useOverlayRail ? { width: rightRailCollapsed ? "0px" : overlayRailWidth, minWidth: rightRailCollapsed ? "0px" : overlayRailWidth, maxWidth: rightRailCollapsed ? "0px" : overlayRailWidth } : { width: rightRailCollapsed ? "0px" : sideRailWidth, minWidth: rightRailCollapsed ? "0px" : sideRailWidth, maxWidth: rightRailCollapsed ? "0px" : sideRailWidth }}
+    >
+      {surfacePanelVisible && !surfaceAsBackground && renderSurfacePanel("rail")}
+      {surfaceAsBackground && (
+        <div style={{ height: surfacePanelHeight, pointerEvents: "none" }} />
+      )}
+      {hasEditDock && (
+        <div className={`viewport-edit-slot ${editDockVisible ? "" : "is-hidden"}`}>
+          {editDock}
+        </div>
+      )}
+      {!surfaceAsBackground && showSurfaceControls && surfacePanelVisible && (
+        <div className="surface-controls-overlay-rail">
+          <div className="surface-controls surface-controls-compact">
+            <div className="surface-controls-title surface-controls-title-compact">
+              <span className="surface-controls-title-icon"><ToolbarIcon kind="cube" /></span>
+              3D Control
+            </div>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
+              <input
+                type="range"
+                min={-160}
+                max={160}
+                step={1}
+                value={surfAzimuth}
+                onChange={(e) => setSurfAzimuth(Number(e.target.value))}
+              />
+            </label>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
+              <input
+                type="range"
+                min={-12}
+                max={85}
+                step={1}
+                value={surfElevation}
+                onChange={(e) => setSurfElevation(Number(e.target.value))}
+              />
+            </label>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="roll" /> Roll</span>
+              <input
+                type="range"
+                min={-140}
+                max={140}
+                step={1}
+                value={surfRoll}
+                onChange={(e) => setSurfRoll(Number(e.target.value))}
+              />
+            </label>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="axisx" /> X</span>
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={surfOffsetX}
+                onChange={(e) => setSurfOffsetX(Number(e.target.value))}
+              />
+            </label>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="axisy" /> Y</span>
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={surfOffsetY}
+                onChange={(e) => setSurfOffsetY(Number(e.target.value))}
+              />
+            </label>
+            <label className="surface-inline-item">
+              <span className="surface-inline-label"><ToolbarIcon kind="axisz" /> Z</span>
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={surfOffsetZ}
+                onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const contourRulerAvailable = Boolean(contourRuler || sim?.contours_nm?.length);
+  const activeRulerMode: "MASK" | "CONTOUR" = selectedRuler === "contour" ? "CONTOUR" : "MASK";
+
+  const applyRulerMode = (mode: "MASK" | "CONTOUR") => {
+    if (mode === "MASK") {
+      setSelectedRuler("mask");
+      return;
+    }
+    if (!contourRulerAvailable) {
+      setSelectedRuler("mask");
+      return;
+    }
+    setSelectedRuler("contour");
+  };
+
+  const rulerKeyboardHelp = "Ruler keyboard\nArrow: move\n[ ]: resize span\nEnter: snap\nShift: coarse step (10nm)";
+
+  const toggleRulerVisibilityFromView = () => {
+    if (showRulers) {
+      setShowRulers(false);
+      setSelectedRuler(null);
+      return;
+    }
+    setShowRulers(true);
+    setSelectedRuler((prev) => (prev === "contour" && contourRulerAvailable ? "contour" : "mask"));
+  };
+
+  const rulerFloatingControl = showRulers ? (
+    <div className={`ruler-floating-box ${overlayPanelsVisible ? "has-overlay-rail" : ""}`} style={{ left: mainCanvasLeftInset, right: "auto" }}>
+      <div className="canvas-toolbar-group ruler-floating-group" aria-label="Ruler toolbox">
+        <span className="ruler-floating-title"><ToolbarIcon kind="ruler" /> Ruler</span>
+        <div className="ruler-floating-seg" role="group" aria-label="Ruler target">
+          <button
+            type="button"
+            className={`toolbar-pill ruler-floating-pill ${activeRulerMode === "MASK" ? "is-active" : ""}`}
+            onClick={() => applyRulerMode("MASK")}
+            title="Mask"
+            aria-label="Ruler mask"
+          >
+            Mask
+          </button>
+          <button
+            type="button"
+            className={`toolbar-pill ruler-floating-pill ${activeRulerMode === "CONTOUR" ? "is-active" : ""}`}
+            onClick={() => applyRulerMode("CONTOUR")}
+            title={contourRulerAvailable ? "Contour" : "Contour not available yet"}
+            aria-label="Ruler contour"
+            disabled={!contourRulerAvailable}
+          >
+            Contour
+          </button>
+        </div>
+        <div className="ruler-floating-seg" role="group" aria-label="Ruler axis">
+          <button
+            type="button"
+            className={`toolbar-pill ruler-floating-pill ruler-axis-pill ${rulerAxis === "H" ? "is-active" : ""}`}
+            onClick={() => setRulerAxis("H")}
+            title="Horizontal"
+            aria-label="Horizontal ruler"
+          >
+            <span className="ruler-axis-glyph" aria-hidden="true">
+              <svg viewBox="0 0 12 12">
+                <path d="M1.6 6h8.8" />
+                <path d="M3.3 4.3 1.6 6l1.7 1.7" />
+                <path d="M8.7 4.3 10.4 6 8.7 7.7" />
+              </svg>
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`toolbar-pill ruler-floating-pill ruler-axis-pill ${rulerAxis === "V" ? "is-active" : ""}`}
+            onClick={() => setRulerAxis("V")}
+            title="Vertical"
+            aria-label="Vertical ruler"
+          >
+            <span className="ruler-axis-glyph" aria-hidden="true">
+              <svg viewBox="0 0 12 12">
+                <path d="M6 1.6v8.8" />
+                <path d="M4.3 3.3 6 1.6l1.7 1.7" />
+                <path d="M4.3 8.7 6 10.4l1.7-1.7" />
+              </svg>
+            </span>
+          </button>
+        </div>
+        <span className="ruler-help-anchor" title={rulerKeyboardHelp} aria-label="Ruler keyboard help">?</span>
+      </div>
+    </div>
+  ) : null;
+
+  const canvasToolbar = (
+    <div className="toolbar toolbar-compact canvas-toolbar-inline">
+      <div className="canvas-toolbar-group">
+        <button
+          type="button"
+          className="toolbar-pill canvas-icon-pill"
+          title="Zoom In"
+          aria-label="Zoom In"
+          onClick={() => zoomAt(scale * 1.2, fovNm / 2, fovNm / 2)}
+        >
+          <ToolbarIcon kind="zoomin" />
         </button>
         <button
-          className="toolbar-pill"
+          type="button"
+          className="toolbar-pill canvas-icon-pill"
+          title="Zoom Out"
+          aria-label="Zoom Out"
+          onClick={() => zoomAt(scale / 1.2, fovNm / 2, fovNm / 2)}
+        >
+          <ToolbarIcon kind="zoomout" />
+        </button>
+        <button
+          type="button"
+          className="toolbar-pill canvas-icon-pill"
+          title="Reset View"
+          aria-label="Reset View"
           onClick={() => {
             centerViewToMask();
           }}
         >
-          <ToolbarIcon kind="reset" /> Reset
+          <ToolbarIcon kind="reset" />
         </button>
-        <details className="view-menu">
+      </div>
+      <div className="canvas-toolbar-group">
+        <details className="view-menu view-menu-align-right">
           <summary className="toolbar-pill">
             <ToolbarIcon kind="view" /> View
           </summary>
@@ -945,15 +1502,23 @@ export function Viewport(props: {
               >
                 Contour
               </button>
+              <button
+                type="button"
+                className={`view-chip ${targetGuide && showTargetOverlay ? "on" : ""}`}
+                onClick={() => setShowTargetOverlay((v) => !v)}
+                disabled={!targetGuide}
+              >
+                Target
+              </button>
               <button type="button" className={`view-chip ${showAerial ? "on" : ""}`} onClick={() => setShowAerial((v) => !v)}>
                 Aerial
               </button>
-              <button type="button" className={`view-chip ${showRulers ? "on" : ""}`} onClick={() => setShowRulers((v) => !v)}>
-                Rulers
+              <button type="button" className={`view-chip ${showRulers ? "on" : ""}`} onClick={toggleRulerVisibilityFromView}>
+                Ruler
               </button>
-              {req.plan === "PRO" && (
+              {allowSurfacePanel && (
                 <button type="button" className={`view-chip ${showSurface3d ? "on" : ""}`} onClick={() => setShowSurface3d((v) => !v)}>
-                  3D Panel
+                  3D
                 </button>
               )}
             </div>
@@ -974,7 +1539,7 @@ export function Viewport(props: {
             )}
           </div>
         </details>
-        <details className="view-menu">
+        <details className="view-menu view-menu-align-right">
           <summary className="toolbar-pill">
             <ToolbarIcon kind="export" /> Export
           </summary>
@@ -1035,147 +1600,202 @@ export function Viewport(props: {
             )}
           </div>
         </details>
-        {sweepResult && sweepPoints.length > 0 && (
-          <details className="view-menu">
-            <summary className="toolbar-pill">
-              <ToolbarIcon kind="contour" /> Sweep View
-            </summary>
-            <div className="view-menu-panel view-menu-panel-minimal sweep-view-menu-panel">
-              <div className="view-chip-grid sweep-view-grid">
-                <button type="button" className={`view-chip ${showSweepOverlay ? "on" : ""}`} onClick={() => setShowSweepOverlay((v) => !v)}>
-                  Overlay
-                </button>
-                <button type="button" className={`view-chip ${sweepStackAll ? "on" : ""}`} onClick={() => setSweepStackAll((v) => !v)}>
-                  Stack All
-                </button>
-              </div>
-              <label className="sweep-view-slider">
-                <span className="sweep-view-slider-label">
-                  Focus point
-                  <b>{sweepIndexClamped + 1}/{sweepPoints.length}</b>
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(0, sweepPoints.length - 1)}
-                  step={1}
-                  value={sweepIndexClamped}
-                  onChange={(e) => setSweepPointIndex(Number(e.target.value))}
-                />
-              </label>
-              {activeSweepPoint && (
-                <div className="view-inline-note">
-                  {sweepResult.param}={activeSweepPoint.value.toFixed(3)}
-                  {activeSweepPoint.metrics.cd_nm == null ? "" : ` · CD ${activeSweepPoint.metrics.cd_nm.toFixed(1)} nm`}
-                </div>
-              )}
-            </div>
-          </details>
-        )}
-        <div className={`ruler-inline ${showRulers ? "" : "ruler-inline-hidden"}`} aria-hidden={!showRulers}>
-          <label style={{ fontSize: 12, opacity: 0.85 }}>Ruler</label>
-          <select
-            value={selectedRuler ?? ""}
-            onChange={(e) => setSelectedRuler((e.target.value || null) as RulerKey | null)}
-            style={{ height: 30, minWidth: 96 }}
-            disabled={!showRulers}
-            tabIndex={showRulers ? 0 : -1}
-          >
-            <option value="">None</option>
-            <option value="mask">Mask</option>
-            {contourRuler && <option value="contour">Contour</option>}
-          </select>
-          <span
-            className="ruler-kbd"
-            title="Arrows move ruler, Shift moves x10, [ ] (or Shift+[ ]) changes width, Enter snaps to edges."
-          >
-            <ToolbarIcon kind="ruler" />
-          </span>
-        </div>
-        <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.72 }}>
-          {sim ? `grid=${sim.grid_used}, nm/px=${sim.nm_per_pixel.toFixed(2)}` : "Run to simulate"}
-        </span>
-        <span style={{ fontSize: 12, opacity: 0.8 }}>2D Zoom {Math.round(scale * 100)}%</span>
       </div>
+      {sweepResult && sweepPoints.length > 0 && (
+        <details className="view-menu view-menu-align-right">
+          <summary className="toolbar-pill">
+            <ToolbarIcon kind="contour" /> Sweep View
+          </summary>
+          <div className="view-menu-panel view-menu-panel-minimal sweep-view-menu-panel">
+            <div className="view-chip-grid sweep-view-grid">
+              <button type="button" className={`view-chip ${showSweepOverlay ? "on" : ""}`} onClick={() => setShowSweepOverlay((v) => !v)}>
+                Overlay
+              </button>
+              <button type="button" className={`view-chip ${sweepStackAll ? "on" : ""}`} onClick={() => setSweepStackAll((v) => !v)}>
+                Stack All
+              </button>
+            </div>
+            <label className="sweep-view-slider">
+              <span className="sweep-view-slider-label">
+                Focus point
+                <b>{sweepIndexClamped + 1}/{sweepPoints.length}</b>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(0, sweepPoints.length - 1)}
+                step={1}
+                value={sweepIndexClamped}
+                onChange={(e) => setSweepPointIndex(Number(e.target.value))}
+              />
+            </label>
+            {activeSweepPoint && (
+              <div className="view-inline-note">
+                {sweepResult.param}={activeSweepPoint.value.toFixed(3)}
+                {activeSweepPoint.metrics.cd_nm == null ? "" : ` · CD ${activeSweepPoint.metrics.cd_nm.toFixed(1)} nm`}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={`viewport-frame ${panelLayoutMode === "overlay" ? "viewport-frame-focus" : ""}`} style={{ display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
       <div
+        className="viewport-panels-grid"
         style={{
-          display: "grid",
-          gridTemplateColumns: req.plan === "PRO" && showSurface3d ? "minmax(0, 1fr) minmax(360px, 42%)" : "minmax(0, 1fr)",
-          gap: 12,
-          alignItems: "stretch",
-          padding: "10px 12px 0",
+          gridTemplateColumns: workspaceHasRightRail
+            ? (isCanvasLayout ? "minmax(0, 1fr) minmax(360px, 34%)" : `minmax(0, 1fr) ${sideRailWidth}`)
+            : "minmax(0, 1fr)",
+          gap: isCanvasLayout ? 0 : 8,
+          padding: isCanvasLayout ? "0" : "4px 6px 0",
+          ["--viewport-main-height" as any]: twoDPanelHeight,
+          ["--overlay-rail-width" as any]: overlayRailWidth,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: isCanvasLayout ? 0 : 8, minWidth: 0, position: "relative", height: twoDPanelHeight }}>
+          {surfaceAsBackground && renderSurfacePanel("main")}
           <div
+            className="viewport-panel-shell viewport-panel-shell-2d"
             style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                alignSelf: "flex-start",
-                padding: "4px 11px",
-                borderRadius: 999,
-                border: "1px solid rgba(128,146,178,0.34)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(238,245,255,0.64))",
-                fontSize: 12,
-                fontWeight: 680,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: "rgba(20,32,54,0.84)",
-              }}
-            >
-              <span
+              position: surfaceAsBackground ? "absolute" : "relative",
+              top: surfaceAsBackground ? 14 : undefined,
+              right: surfaceAsBackground ? 10 : undefined,
+              left: surfaceAsBackground ? "auto" : undefined,
+              width: surfaceAsBackground ? overlayRailWidth : "100%",
+              height: surfaceAsBackground ? surfacePanelHeight : twoDPanelHeight,
+              border: surfaceAsBackground
+                ? "1px solid rgba(96,108,132,0.4)"
+                : (isCanvasLayout ? "none" : "1px solid rgba(162,186,224,0.34)"),
+              borderRadius: surfaceAsBackground ? 16 : (isCanvasLayout ? 0 : 16),
+              background: "radial-gradient(160% 150% at 18% 4%, #23344d 0%, #16263c 45%, #0b1626 100%)",
+              boxShadow: surfaceAsBackground
+                ? "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -30px 66px rgba(2,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)"
+                : (isCanvasLayout
+                  ? "none"
+                  : "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -40px 80px rgba(2,10,22,0.42), 0 18px 36px rgba(4,10,18,0.38)"),
+              overflow: "hidden",
+              zIndex: surfaceAsBackground ? 8 : 1,
+              ["--canvas-left-inset" as any]: `${(!surfaceAsBackground && panelLayoutMode === "overlay") ? canvasLeftInset : 0}px`,
+              ["--canvas-command-h" as any]: `${(!surfaceAsBackground && isCanvasLayout) ? canvasCommandHeight : 0}px`,
+            }}
+          >
+            {!surfaceAsBackground && (
+              <div ref={canvasCommandRef} className={`canvas-command-strip ${overlayPanelsVisible ? "has-overlay-rail" : ""}`} style={{ right: canvasCommandRight }}>
+                <div className="canvas-command-primary">
+                  <div className="canvas-command-logo" aria-label="litopc">
+                    <span className="canvas-command-logo-lit">lit</span>
+                    <span className="canvas-command-logo-opc">opc</span>
+                  </div>
+                  {canvasModeHud}
+                  {canvasToolbar}
+                </div>
+              </div>
+            )}
+            {surfaceAsBackground && (
+              <>
+                <div className="panel-corner-actions" style={{ top: 10, right: 10, zIndex: 9 }}>
+                  <button
+                    type="button"
+                    className="panel-mini-toggle"
+                    onClick={() => setSurfaceSwapMain(false)}
+                    title="Swap back to 2D main"
+                    aria-label="Swap back to 2D main"
+                  >
+                    2D↔3D
+                  </button>
+                </div>
+                {surfacePanelVisible && (
+                  <div className="panel-corner-actions panel-corner-actions-bottom-left" style={{ zIndex: 9 }}>
+                    <button
+                      type="button"
+                      className={`panel-mini-control ${showSurfaceControls ? "is-active" : ""}`}
+                      onClick={() => setShowSurfaceControls((v) => !v)}
+                      title={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
+                      aria-label={showSurfaceControls ? "Hide 3D control" : "Show 3D control"}
+                    >
+                      <ToolbarIcon kind="cube" />
+                      3D Ctrl
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {(showLegend || !surfaceAsBackground) && (
+              <div
+                className="canvas-bottom-right-stack"
                 style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 999,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(235,238,243,0.72))",
-                  color: "rgba(34,40,50,0.9)",
-                  border: "1px solid rgba(30,36,48,0.18)",
+                  position: surfaceAsBackground ? "fixed" : "absolute",
+                  right: overlayRailInset,
+                  bottom: 14,
+                  zIndex: surfaceAsBackground ? 12 : 9,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: showLegend && !surfaceAsBackground ? 7 : 0,
+                  maxWidth: `calc(100% - ${mainCanvasLeftInset} - ${overlayRailInset} - 12px)`,
+                  pointerEvents: "none",
                 }}
               >
-                <ToolbarIcon kind="plane2d" />
-              </span>
-              2D
-            </div>
-          <div
-            style={{
-            position: "relative",
-            width: "100%",
-            height: panelHeight,
-            border: "1px solid rgba(162,186,224,0.34)",
-            borderRadius: 16,
-            background: "radial-gradient(160% 150% at 18% 4%, #23344d 0%, #16263c 45%, #0b1626 100%)",
-            boxShadow: "inset 0 1px 0 rgba(238,246,255,0.28), inset 0 -40px 80px rgba(2,10,22,0.42), 0 18px 36px rgba(4,10,18,0.38)",
-            overflow: "hidden",
-          }}
-        >
-          {showLegend && (
-            <div
-              className="legend-card"
-              style={{
-                position: "absolute",
-                top: 10,
-                left: 10,
-                zIndex: 3,
-                margin: 0,
-                backdropFilter: "blur(10px)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,255,0.62))",
-                pointerEvents: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                fontSize: 12,
-                lineHeight: 1,
-                padding: "6px 9px",
-              }}
-            >
+                {!surfaceAsBackground && (
+                  <div
+                    className={`canvas-tech-text ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
+                    style={{ position: "relative", right: "auto", bottom: "auto", top: "auto" }}
+                  >
+                    {sim ? `grid=${sim.grid_used} · nm/px=${sim.nm_per_pixel.toFixed(2)}` : "Run to simulate"}
+                  </div>
+                )}
+                {showLegend && (
+                  <div
+                    className={`legend-card canvas-legend ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
+                    style={{
+                      position: "relative",
+                      top: "auto",
+                      bottom: "auto",
+                      right: "auto",
+                      left: "auto",
+                      zIndex: surfaceAsBackground ? 12 : 3,
+                      margin: 0,
+                      backdropFilter: "blur(10px)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,255,0.62))",
+                      pointerEvents: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                      rowGap: 4,
+                      maxWidth: "100%",
+                      fontSize: 12,
+                      lineHeight: 1,
+                      padding: "6px 9px",
+                    }}
+                  >
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
-                <span style={{ width: 16, height: 8, border: "1.2px solid #cc2d64", background: "rgba(255,90,138,0.18)", borderRadius: 2 }} />
-                Mask
+                <span
+                  style={{
+                    width: 16,
+                    height: 8,
+                    border: "1.2px solid #cc2d64",
+                    borderRadius: 2,
+                    background: "repeating-linear-gradient(-28deg, rgba(255,232,242,0.38) 0px, rgba(255,232,242,0.38) 2px, rgba(255,90,138,0.16) 2px, rgba(255,90,138,0.16) 8px)",
+                  }}
+                />
+                Final Mask
               </span>
+              {!!overlayAddPaths.length && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+                  <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(176,216,255,0.14)", border: "1px solid rgba(176,216,255,0.32)" }} />
+                  Add
+                </span>
+              )}
+                {!!maskSubtractPaths.length && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
+                    <span style={{ width: 16, height: 8, borderRadius: 2, background: "rgba(22,42,74,0.18)", border: "1px solid rgba(124,162,228,0.44)" }} />
+                    Subtract
+                  </span>
+                )}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 11, fontWeight: 560 }}>
                 <span style={{ width: 16, height: 8, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                   <span style={{ width: "100%", borderTop: "1.6px solid #1f1f1f", display: "block", transform: "translateY(-0.5px)" }} />
@@ -1186,6 +1806,12 @@ export function Viewport(props: {
                 <span style={{ width: 16, height: 8, borderRadius: 2, background: "linear-gradient(90deg, rgba(92,225,230,0.65), rgba(255,69,58,0.62))" }} />
                 Aerial
               </span>
+              {targetGuide && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560, opacity: showTargetOverlay ? 1 : 0.45 }}>
+                  <span style={{ width: 16, borderTop: "1.6px dashed rgba(98,242,214,0.95)" }} />
+                  Target
+                </span>
+              )}
               {compareActive && (
                 <>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 11, fontWeight: 560 }}>
@@ -1198,9 +1824,23 @@ export function Viewport(props: {
                   </span>
                 </>
               )}
+                  </div>
+                )}
+              </div>
+            )}
+          {!surfaceAsBackground && renderSweepStatusLine("2d")}
+          {!surfaceAsBackground && editorTool === "PLACE_SRAF" && (
+            <div
+              className="sraf-place-hint"
+              style={{
+                left: `${(((srafHintPoint?.x ?? (fovNm * 0.5)) / Math.max(1, fovNm)) * 100).toFixed(3)}%`,
+                top: `${(((srafHintPoint?.y ?? (fovNm * 0.5)) / Math.max(1, fovNm)) * 100).toFixed(3)}%`,
+              }}
+            >
+              <span className="sraf-place-hint-dot" aria-hidden="true" />
+              Click in 2D to place SRAF
             </div>
           )}
-          {renderSweepStatusLine("2d")}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${fovNm} ${fovNm}`}
@@ -1209,7 +1849,9 @@ export function Viewport(props: {
               inset: 0,
               width: "100%",
               height: "100%",
-              cursor: drawRectMode ? "crosshair" : (dragging ? "grabbing" : "grab"),
+              cursor: editorTool === "DRAW_ADD_RECT" || editorTool === "DRAW_SUBTRACT_RECT" || editorTool === "PLACE_SRAF"
+                ? "crosshair"
+                : (dragging ? "grabbing" : "grab"),
             }}
             onWheel={onWheel}
             onMouseDown={onMouseDown}
@@ -1272,6 +1914,12 @@ export function Viewport(props: {
                 <pattern id="opc-grid" width={80} height={80} patternUnits="userSpaceOnUse">
                   <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(166,198,236,0.065)" strokeWidth="1" />
                 </pattern>
+                <pattern id="target-hatch" width={14} height={14} patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+                  <path d="M 0 0 L 0 14" fill="none" stroke="rgba(98,242,214,0.24)" strokeWidth="2" />
+                </pattern>
+                <pattern id="final-mask-hatch" width={18} height={18} patternUnits="userSpaceOnUse" patternTransform="rotate(-28)">
+                  <path d="M 0 0 L 0 18" fill="none" stroke="rgba(255,226,242,0.09)" strokeWidth="3" />
+                </pattern>
                 <linearGradient id="mask-fill" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0%" stopColor="rgba(255,204,225,0.58)" />
                   <stop offset="60%" stopColor="rgba(255,132,179,0.24)" />
@@ -1295,17 +1943,17 @@ export function Viewport(props: {
                   transform={`translate(0 ${fovNm}) scale(1 -1)`}
                 />
               )}
-              {req.mask.mode === "CUSTOM" && (req.mask.shapes ?? []).map((shape, idx) => (
+              {editableShapes.map((shape, idx) => (
                 <path
                   key={`custom-hit-${idx}`}
-                  d={customShapePaths[idx] ?? ""}
+                  d={editableShapePaths[idx] ?? ""}
                   fill="rgba(255,255,255,0.001)"
-                  stroke={selectedCustomShapeIndexes.includes(idx) ? "rgba(120,197,255,0.92)" : "rgba(0,0,0,0)"}
+                  stroke={selectedCustomShapeIndexes.includes(idx) ? (activeEditLayer === "TARGET" ? "rgba(98,242,214,0.98)" : "rgba(255,132,196,0.94)") : "rgba(0,0,0,0)"}
                   strokeWidth={selectedCustomShapeIndexes.includes(idx) ? 1.2 : 0.001}
                   vectorEffect="non-scaling-stroke"
                   style={{ cursor: "move" }}
                   onMouseDown={(e) => {
-                    if (drawRectMode) return;
+                    if (editorTool !== "SELECT") return;
                     e.stopPropagation();
                     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
                     onSelectCustomShape?.(idx, additive);
@@ -1317,13 +1965,35 @@ export function Viewport(props: {
                       indexes: activeIndexes,
                       x: ps.x_nm,
                       y: ps.y_nm,
-                      startShapes: [...(req.mask.shapes ?? [])],
+                      startShapes: editableShapes.map(cloneViewportShape),
                     };
                     setDragging(true);
                   }}
                 />
               ))}
-              {req.mask.mode === "CUSTOM" && selectedCustomRect && (() => {
+              {req.mask.mode === "TEMPLATE" && activeEditLayer !== "TARGET" && presetAnchorShapes.map((_, idx) => {
+                const d = presetAnchorPaths[idx] ?? "";
+                const selected = selectedCustomShapeIndexes.length === 0 && idx === selectedPresetAnchorIndex;
+                return (
+                  <g key={`preset-anchor-${idx}`}>
+                    <path
+                      d={d}
+                      fill="rgba(255,132,196,0.01)"
+                      stroke={selected ? "rgba(255,132,196,0.96)" : "rgba(255,182,220,0.34)"}
+                      strokeWidth={selected ? 1.4 : 0.95}
+                      strokeDasharray={selected ? "8 4" : "4 4"}
+                      vectorEffect="non-scaling-stroke"
+                      style={{ cursor: "pointer" }}
+                      onMouseDown={(e) => {
+                        if (editorTool !== "SELECT") return;
+                        e.stopPropagation();
+                        onSelectPresetAnchor?.(idx);
+                      }}
+                    />
+                  </g>
+                );
+              })}
+              {selectedCustomRect && (() => {
                 const handleRadiusNm = 4.2 / Math.max(scale, 0.0001);
                 const left = selectedCustomRect.x_nm;
                 const right = selectedCustomRect.x_nm + selectedCustomRect.w_nm;
@@ -1343,7 +2013,7 @@ export function Viewport(props: {
                       width={Math.max(1, selectedCustomRect.w_nm)}
                       height={Math.max(1, selectedCustomRect.h_nm)}
                       fill="none"
-                      stroke="rgba(116,196,255,0.92)"
+                      stroke="rgba(255,132,196,0.96)"
                       strokeWidth={1.25}
                       strokeDasharray="4 3"
                       vectorEffect="non-scaling-stroke"
@@ -1355,7 +2025,7 @@ export function Viewport(props: {
                         cy={c.y}
                         r={handleRadiusNm}
                         fill="rgba(235,246,255,0.95)"
-                        stroke="rgba(60,130,212,0.9)"
+                        stroke="rgba(214,88,150,0.94)"
                         strokeWidth={1.1}
                         vectorEffect="non-scaling-stroke"
                         style={{ cursor: c.key === "nw" || c.key === "se" ? "nwse-resize" : "nesw-resize" }}
@@ -1364,7 +2034,7 @@ export function Viewport(props: {
                           customRectResizeRef.current = {
                             index: selectedCustomShapeIndex,
                             corner: c.key,
-                            startShapes: [...(req.mask.shapes ?? [])],
+                            startShapes: editableShapes.map(cloneViewportShape),
                           };
                           setDragging(true);
                         }}
@@ -1373,38 +2043,146 @@ export function Viewport(props: {
                   </g>
                 );
               })()}
-              {req.mask.mode === "CUSTOM" && customRectDraft && (
+              {customRectDraft && (
                 <path
                   d={rectPath(customRectDraft.x_nm, customRectDraft.y_nm, customRectDraft.w_nm, customRectDraft.h_nm, fovNm)}
-                  fill="rgba(120,190,255,0.16)"
-                  stroke="rgba(120,190,255,0.95)"
+                  fill={editorTool === "DRAW_SUBTRACT_RECT" ? "rgba(255,142,118,0.12)" : "rgba(120,190,255,0.16)"}
+                  stroke={editorTool === "DRAW_SUBTRACT_RECT" ? "rgba(255,142,118,0.98)" : "rgba(120,190,255,0.95)"}
                   strokeWidth={1.2}
                   strokeDasharray="5 4"
                   vectorEffect="non-scaling-stroke"
                 />
               )}
-              <path
-                d={maskPath}
-                fill="url(#mask-fill)"
-                filter="url(#mask-glow)"
-                stroke="none"
-              />
-              <path
-                d={maskPath}
-                fill="none"
-                stroke="rgba(78,34,70,0.52)"
-                strokeWidth={1.28}
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-              <path
-                d={maskPath}
-                fill="none"
-                stroke="rgba(255,218,238,0.88)"
-                strokeWidth={0.9}
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
+              {finalMaskCompoundPath && (
+                <>
+                  <path
+                    d={finalMaskCompoundPath}
+                    fill="url(#mask-fill)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    filter="url(#mask-glow)"
+                  />
+                  <path
+                    d={finalMaskCompoundPath}
+                    fill="url(#final-mask-hatch)"
+                    fillRule="evenodd"
+                    clipRule="evenodd"
+                    opacity={0.72}
+                  />
+                </>
+              )}
+              {targetGuide && showTargetOverlay && targetContours.map((contour, idx) => {
+                const d = polylineToPath(contour.points_nm, fovNm);
+                return (
+                  <g key={`target-contour-${idx}`}>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="rgba(10,42,44,0.62)"
+                      strokeWidth={4.1}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="rgba(12,42,44,0.28)"
+                      strokeWidth={2.15}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="rgba(98,242,214,0.9)"
+                      strokeWidth={1.12}
+                      strokeDasharray="5 3"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </g>
+                );
+              })}
+              {overlayAddPaths.map((d, idx) => (
+                <g key={`overlay-add-${idx}`}>
+                  <path
+                    d={d}
+                    fill="rgba(176,216,255,0.07)"
+                    stroke="none"
+                  />
+                </g>
+              ))}
+              {overlayAddPaths.map((d, idx) => (
+                <path
+                  key={`overlay-add-outline-${idx}`}
+                  d={d}
+                  fill="none"
+                  stroke="rgba(255,142,202,0.84)"
+                  strokeWidth={0.92}
+                  strokeDasharray="4 3"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {maskSubtractPaths.map((d, idx) => (
+                <g key={`mask-sub-outline-${idx}`}>
+                  <path
+                    d={d}
+                    fill="rgba(22,42,74,0.18)"
+                    stroke="none"
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="rgba(124,162,228,0.44)"
+                    strokeWidth={0.96}
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              ))}
+              {finalMaskContourPaths.map((d, idx) => (
+                <g key={`mask-outline-${idx}`}>
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="rgba(70,28,60,0.7)"
+                    strokeWidth={1.62}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d={d}
+                    fill="none"
+                    stroke="rgba(255,236,246,0.98)"
+                    strokeWidth={1.06}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </g>
+              ))}
+              {targetGuide && showTargetOverlay && targetContours.map((contour, idx) => {
+                const d = polylineToPath(contour.points_nm, fovNm);
+                return (
+                  <path
+                    key={`target-contour-top-${idx}`}
+                    d={d}
+                    fill="none"
+                    stroke="rgba(118,255,230,0.92)"
+                    strokeWidth={1.08}
+                    strokeDasharray="5 3"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
               {effectiveShowMainContour && sim?.contours_nm?.map((c, idx) => {
                 const d = polylineToPath(c.points_nm, fovNm);
                 return (
@@ -1616,6 +2394,7 @@ export function Viewport(props: {
                       x0={maskRuler.x0}
                       x1={maskRuler.x1}
                       y={maskRuler.y}
+                      axis={rulerAxis}
                       color="#cc2d64"
                       label={`Mask ${Math.abs(maskRuler.x1 - maskRuler.x0).toFixed(1)} nm`}
                       labelDy={-14}
@@ -1634,6 +2413,7 @@ export function Viewport(props: {
                       x0={contourRuler.x0}
                       x1={contourRuler.x1}
                       y={contourRuler.y}
+                      axis={rulerAxis}
                       color="#d6e0f2"
                       label={`Contour ${Math.abs(contourRuler.x1 - contourRuler.x0).toFixed(1)} nm`}
                       labelDy={22}
@@ -1652,224 +2432,178 @@ export function Viewport(props: {
             </g>
           </svg>
         </div>
-        </div>
-
-        {req.plan === "PRO" && showSurface3d && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+          {overlayPanelsMounted && (
+            <div className="viewport-overlay-panels">
+              {renderRightRailPanels()}
+            </div>
+          )}
+          {rulerFloatingControl}
+          {showSurfaceControls && surfacePanelVisible && surfaceAsBackground && (
             <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                alignSelf: "flex-start",
-                padding: "4px 11px",
-                borderRadius: 999,
-                border: "1px solid rgba(128,146,178,0.34)",
-                background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(238,245,255,0.64))",
-                fontSize: 12,
-                fontWeight: 680,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                color: "rgba(20,32,54,0.84)",
-              }}
+              className={`surface-controls-overlay-main ${overlayPanelsVisible ? "has-overlay-rail" : ""}`}
+              style={{ top: 14, right: overlayRailInset }}
             >
-              <span
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 999,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(235,238,243,0.72))",
-                  color: "rgba(34,40,50,0.9)",
-                  border: "1px solid rgba(30,36,48,0.18)",
-                }}
-              >
-                <ToolbarIcon kind="cube" />
-              </span>
-              3D
-            </div>
-            <div
-              style={{
-              position: "relative",
-              border: "1px solid rgba(122,128,140,0.3)",
-              borderRadius: 13,
-              background: "linear-gradient(168deg, rgba(249,252,255,0.96) 0%, rgba(236,243,252,0.92) 54%, rgba(225,235,248,0.9) 100%)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.88), inset 0 -22px 44px rgba(52,64,86,0.10), 0 14px 28px rgba(16,24,38,0.14)",
-              overflow: "hidden",
-              height: panelHeight,
-              display: "flex",
-              flexDirection: "column",
-              isolation: "isolate",
-            }}
-          >
-            {renderSweepStatusLine("3d")}
-            <div className="surface-controls surface-controls-compact" style={{ position: "relative", zIndex: 1 }}>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
-                <input
-                  type="range"
-                  min={-160}
-                  max={160}
-                  step={1}
-                  value={surfAzimuth}
-                  onChange={(e) => setSurfAzimuth(Number(e.target.value))}
-                />
-              </label>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
-                <input
-                  type="range"
-                  min={-12}
-                  max={85}
-                  step={1}
-                  value={surfElevation}
-                  onChange={(e) => setSurfElevation(Number(e.target.value))}
-                />
-              </label>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="roll" /> Roll</span>
-                <input
-                  type="range"
-                  min={-140}
-                  max={140}
-                  step={1}
-                  value={surfRoll}
-                  onChange={(e) => setSurfRoll(Number(e.target.value))}
-                />
-              </label>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="axisx" /> X</span>
-                <input
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={surfOffsetX}
-                  onChange={(e) => setSurfOffsetX(Number(e.target.value))}
-                />
-              </label>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="axisy" /> Y</span>
-                <input
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={surfOffsetY}
-                  onChange={(e) => setSurfOffsetY(Number(e.target.value))}
-                />
-              </label>
-              <label className="surface-inline-item">
-                <span className="surface-inline-label"><ToolbarIcon kind="axisz" /> Z</span>
-                <input
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={surfOffsetZ}
-                  onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
-                />
-              </label>
-            </div>
-            <div style={{ padding: 8, flex: 1, minHeight: 0, position: "relative", zIndex: 1 }}>
-              <canvas
-                ref={surfaceCanvasRef}
-              style={{
-                width: "100%",
-                height: "100%",
-                border: "1px solid rgba(96,108,132,0.4)",
-                borderRadius: 11,
-                background:
-                  "radial-gradient(168% 158% at 18% 2%, #334763 0%, #25364e 40%, #172538 78%, #121c2b 100%)",
-                boxShadow: "inset 0 1px 0 rgba(244,248,255,0.18), inset 0 -34px 72px rgba(4,10,22,0.46), 0 10px 20px rgba(20,30,46,0.22)",
-                cursor: "grab",
-              }}
-                onMouseDown={(e) => {
-                  if (e.shiftKey) {
-                    surfaceDragRef.current = { mode: "pan", x: e.clientX, y: e.clientY, ox: surfOffsetX, oy: surfOffsetY };
-                  } else {
-                    surfaceDragRef.current = { mode: "rotate", x: e.clientX, y: e.clientY, az: surfAzimuth, el: surfElevation };
-                  }
-                  setSurfaceFastMode();
-                }}
-                onMouseMove={(e) => {
-                  if (!surfaceDragRef.current) return;
-                  const d = surfaceDragRef.current;
-                  const dx = e.clientX - d.x;
-                  const dy = e.clientY - d.y;
-                  if (d.mode === "rotate") {
-                    setSurfAzimuth(Math.max(-160, Math.min(160, d.az + dx * 0.3)));
-                    setSurfElevation(Math.max(-12, Math.min(85, d.el + dy * 0.22)));
-                  } else {
-                    setSurfOffsetX(Math.max(-1, Math.min(1, d.ox + dx / 240)));
-                    setSurfOffsetY(Math.max(-1, Math.min(1, d.oy + dy / 240)));
-                  }
-                  setSurfaceFastMode();
-                }}
-                onMouseUp={() => {
-                  surfaceDragRef.current = null;
-                  scheduleSurfaceFullMode(120);
-                }}
-                onMouseLeave={() => {
-                  surfaceDragRef.current = null;
-                  scheduleSurfaceFullMode(120);
-                }}
-              />
-              {!sim?.intensity && (
-                <div className="small-note" style={{ marginTop: 6 }}>
-                  Run simulation to generate 3D aerial surface.
+              <div className="surface-controls surface-controls-compact">
+                <div className="surface-controls-title surface-controls-title-compact">
+                  <span className="surface-controls-title-icon"><ToolbarIcon kind="cube" /></span>
+                  3D Control
                 </div>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="azimuth" /> Az</span>
+                  <input
+                    type="range"
+                    min={-160}
+                    max={160}
+                    step={1}
+                    value={surfAzimuth}
+                    onChange={(e) => setSurfAzimuth(Number(e.target.value))}
+                  />
+                </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="elevation" /> El</span>
+                  <input
+                    type="range"
+                    min={-12}
+                    max={85}
+                    step={1}
+                    value={surfElevation}
+                    onChange={(e) => setSurfElevation(Number(e.target.value))}
+                  />
+                </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="roll" /> Roll</span>
+                  <input
+                    type="range"
+                    min={-140}
+                    max={140}
+                    step={1}
+                    value={surfRoll}
+                    onChange={(e) => setSurfRoll(Number(e.target.value))}
+                  />
+                </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="axisx" /> X</span>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={surfOffsetX}
+                    onChange={(e) => setSurfOffsetX(Number(e.target.value))}
+                  />
+                </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="axisy" /> Y</span>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={surfOffsetY}
+                    onChange={(e) => setSurfOffsetY(Number(e.target.value))}
+                  />
+                </label>
+                <label className="surface-inline-item">
+                  <span className="surface-inline-label"><ToolbarIcon kind="axisz" /> Z</span>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={surfOffsetZ}
+                    onChange={(e) => setSurfOffsetZ(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+        {workspaceHasRightRail && renderRightRailPanels()}
+      </div>
+
+      {!isCanvasLayout && showMetricsFooter && (
+        <>
+          <div className="metrics-strip">
+            <div className="metrics-strip-head">
+              <div className="metrics-strip-primary">
+                <span className="metrics-strip-label">Metrics</span>
+                <span className="metrics-strip-value">{sim?.metrics?.cd_nm ? `CD ~ ${sim.metrics.cd_nm.toFixed(1)} nm` : "-"}</span>
+                {compareActive && typeof compareACd === "number" && typeof compareBCd === "number" && (
+                  <span className="metrics-strip-compare">
+                    A {compareACd.toFixed(1)} nm · B {compareBCd.toFixed(1)} nm · Delta {(compareBCd - compareACd).toFixed(1)} nm
+                  </span>
+                )}
+              </div>
+              {compareActive && (
+                <span className="metrics-strip-note">
+                  {compareALabel ? `A=${compareALabel}` : ""}{compareALabel && compareBLabel ? " · " : ""}{compareBLabel ? `B=${compareBLabel}` : ""}
+                </span>
               )}
             </div>
+            {targetGuide && (
+              <div className="target-metrics-card">
+                <div className="target-metrics-head">
+                  <div className="target-metrics-title">
+                    <span className="target-metrics-eyebrow">Target Workspace</span>
+                    <strong>{targetGuide.title}</strong>
+                  </div>
+                  <div className="target-metrics-score">
+                    {targetMetrics?.score == null ? "Run to score" : `${targetMetrics.score.toFixed(1)}/100`}
+                  </div>
+                </div>
+                <div className="target-metrics-sub">
+                  {targetMetrics?.recommendation ?? targetGuide.hint}
+                </div>
+                <div className="target-metrics-tags">
+                  <span>{targetMetrics?.grade ?? "Run to score"}</span>
+                  <span>Mean EPE {targetMetrics?.epeMeanNm == null ? "-" : `${targetMetrics.epeMeanNm.toFixed(1)} nm`}</span>
+                  <span>Mask Penalty {targetMetrics?.complexityPenalty?.toFixed(1) ?? "0.0"}</span>
+                </div>
+              </div>
+            )}
           </div>
-          </div>
-        )}
-      </div>
-      <div className="trust-strip trust-strip-bottom" title={trustTooltipText}>
-        <div className="trust-row trust-row-minimal" title={trustTooltipText}>
-          <span className="trust-info-dot" aria-hidden="true">i</span>
-          <span className="trust-chip trust-chip-formula trust-chip-min">
-            CDmin ? k1·λ/NA
-          </span>
-          <span className="trust-chip trust-chip-active trust-chip-min" title={trustTooltipText}>
-            {trustPreset.title} · k1 {trustPreset.k1.toFixed(2)} · {trustCdMinNm.toFixed(1)} nm
-          </span>
-          <span className="trust-chip trust-chip-version trust-chip-min trust-chip-tail">
-            {MODEL_VERSION_TAG}
-          </span>
-        </div>
-      </div>
-      <div className="trust-links-row">
-        <a className="trust-link-mini" href="/opclab/model-summary">Model Guide</a>
-        <a className="trust-link-mini" href="/opclab/benchmark-gallery">Benchmark Gallery</a>
-        <a className="trust-link-mini" href="/opclab/model-change-log">Model Change Log</a>
-        <a className="trust-link-mini" href="/opclab/trust-dashboard">Trust Dashboard</a>
-        <a className="trust-link-mini" href="/opclab/advanced-analytics">Advanced Analytics</a>
-      </div>
 
-      <div className="metrics-strip">
-        <b>Metrics:</b>{" "}
-        {sim?.metrics?.cd_nm ? `CD ~ ${sim.metrics.cd_nm.toFixed(1)} nm` : "-"}
-        {compareActive && typeof compareACd === "number" && typeof compareBCd === "number" && (
-          <span style={{ marginLeft: 10 }}>
-            | <b>A</b>: {compareACd.toFixed(1)} nm, <b>B</b>: {compareBCd.toFixed(1)} nm, <b>Delta</b>: {(compareBCd - compareACd).toFixed(1)} nm
-          </span>
-        )}
-        {compareActive && (
-          <span className="small-note" style={{ marginLeft: 10, fontSize: 12 }}>
-            {compareALabel ? `A=${compareALabel}` : ""}{compareALabel && compareBLabel ? " | " : ""}{compareBLabel ? `B=${compareBLabel}` : ""}
-          </span>
-        )}
-      </div>
+          <div className="trust-strip trust-strip-bottom" title={trustTooltipText}>
+            <div className="trust-row trust-row-minimal" title={trustTooltipText}>
+              <span className="trust-info-dot" aria-hidden="true">i</span>
+              <span className="trust-chip trust-chip-formula trust-chip-min">
+                CDmin ? k1·λ/NA
+              </span>
+              <span className="trust-chip trust-chip-active trust-chip-min" title={trustTooltipText}>
+                {trustPreset.title} · k1 {trustPreset.k1.toFixed(2)} · {trustCdMinNm.toFixed(1)} nm
+              </span>
+              <span className="trust-chip trust-chip-version trust-chip-min trust-chip-tail">
+                {MODEL_VERSION_TAG}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function ToolbarIcon(props: { kind: "plus" | "minus" | "reset" | "legend" | "ruler" | "cube" | "contour" | "aerial" | "view" | "export" | "plane2d" | "camera" | "azimuth" | "elevation" | "roll" | "axisx" | "axisy" | "axisz" }) {
+function ToolbarIcon(props: { kind: "plus" | "minus" | "zoomin" | "zoomout" | "reset" | "legend" | "ruler" | "cube" | "contour" | "aerial" | "view" | "export" | "plane2d" | "camera" | "azimuth" | "elevation" | "roll" | "axisx" | "axisy" | "axisz" }) {
   const { kind } = props;
   const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (kind === "zoomin") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="6.6" cy="6.6" r="3.4" {...stroke} />
+        <path d="M9.2 9.2 13.2 13.2" {...stroke} />
+        <path d="M6.6 4.9V8.3M4.9 6.6H8.3" {...stroke} />
+      </svg>
+    );
+  }
+  if (kind === "zoomout") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="6.6" cy="6.6" r="3.4" {...stroke} />
+        <path d="M9.2 9.2 13.2 13.2" {...stroke} />
+        <path d="M4.9 6.6H8.3" {...stroke} />
+      </svg>
+    );
+  }
   if (kind === "plus") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -2066,6 +2800,10 @@ function createSurfaceProjector(view: {
   const shiftX = safeOffsetX * 0.36;
   const shiftY = safeOffsetY * 0.36;
   const shiftZ = safeOffsetZ * 0.36;
+  const perspectiveFocal = 2.9;
+  const perspectiveStrength = 0.9;
+  const perspectiveMin = 0.72;
+  const perspectiveMax = 1.58;
 
   return (xN: number, yN: number, zN: number) => {
     const xIn = safe(xN, 0) + shiftX;
@@ -2080,10 +2818,16 @@ function createSurfaceProjector(view: {
     const x3 = x2 * cosR + z2 * sinR;
     const y3 = y2;
     const z3 = -x2 * sinR + z2 * cosR;
+    const depth = y3 + z3 * 0.35;
+    const perspectiveDen = Math.max(0.42, perspectiveFocal - depth * perspectiveStrength);
+    const perspective = Math.max(
+      perspectiveMin,
+      Math.min(perspectiveMax, perspectiveFocal / perspectiveDen)
+    );
     return {
-      sx: cx + x3 * scale,
-      sy: cy + y3 * scale * 0.9,
-      depth: y3 + z3 * 0.35,
+      sx: cx + x3 * scale * perspective,
+      sy: cy + y3 * scale * 0.9 * perspective,
+      depth,
     };
   };
 }
@@ -2106,8 +2850,13 @@ function drawSurface3D(
     zoomScale: number;
     qualityMode: "FAST" | "FULL";
     fovNm: number;
-    maskRects: Array<{ x: number; y: number; w: number; h: number }>;
+    maskAddRects: Array<{ x: number; y: number; w: number; h: number }>;
+    maskSubtractRects: Array<{ x: number; y: number; w: number; h: number }>;
+    overlayAddRects: Array<{ x: number; y: number; w: number; h: number }>;
+    finalMaskContours: Array<{ points_nm: Array<{ x: number; y: number }> }>;
     contours: Array<{ points_nm: Array<{ x: number; y: number }> }>;
+    targetContours: Array<{ points_nm: Array<{ x: number; y: number }> }>;
+    showTargetOverlay: boolean;
     compareActive: boolean;
     compareAContours: Array<{ points_nm: Array<{ x: number; y: number }> }>;
     compareBContours: Array<{ points_nm: Array<{ x: number; y: number }> }>;
@@ -2137,7 +2886,7 @@ function drawSurface3D(
     if (v > vmax) vmax = v;
   }
   const span = Math.max(1e-9, vmax - vmin);
-  const surfaceFeatureBoost = calcSurfaceFeatureBoost(opts.maskRects, opts.fovNm);
+  const surfaceFeatureBoost = calcSurfaceFeatureBoost(opts.maskAddRects, opts.fovNm);
   // Keep 3D contour thickness/glow independent from feature size (CD).
   const contourUnder3d = 3.35;
   const contourMain3d = 1.95;
@@ -2170,11 +2919,11 @@ function drawSurface3D(
   const maskPlateAlpha = isRevealMask ? 0.09 : 0.16;
   const apertureAlpha = isRevealMask ? 0.22 : 0.3;
   const featureCenterNm = (() => {
-    if (!opts.maskRects.length) return { x: opts.fovNm * 0.5, y: opts.fovNm * 0.5 };
+    if (!opts.maskAddRects.length) return { x: opts.fovNm * 0.5, y: opts.fovNm * 0.5 };
     let sx = 0;
     let sy = 0;
     let c = 0;
-    for (const r of opts.maskRects) {
+    for (const r of opts.maskAddRects) {
       sx += r.x + r.w * 0.5;
       sy += r.y + r.h * 0.5;
       c += 1;
@@ -2264,64 +3013,74 @@ function drawSurface3D(
     ctx.closePath();
     ctx.fill();
 
-    // Subtle brushed-metal texture.
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(top.p0.sx, top.p0.sy);
-    ctx.lineTo(top.p1.sx, top.p1.sy);
-    ctx.lineTo(top.p2.sx, top.p2.sy);
-    ctx.lineTo(top.p3.sx, top.p3.sy);
-    ctx.closePath();
-    ctx.clip();
-    ctx.strokeStyle = `rgba(218,232,252,${isRevealMask ? 0.03 : 0.05})`;
-    ctx.lineWidth = 0.9;
-    for (let i = -8; i < 34; i++) {
-      const t = i / 26;
-      const a = project(-0.62 + t, -0.58, maskZTop + 0.001);
-      const b = project(-0.48 + t, 0.62, maskZTop + 0.001);
-      ctx.beginPath();
-      ctx.moveTo(a.sx, a.sy);
-      ctx.lineTo(b.sx, b.sy);
-      ctx.stroke();
-    }
-    ctx.restore();
-    // Intentionally skip explicit top-plate edge strokes.
-    // They can appear as diagonal white artifact lines at specific camera angles.
-
-    for (const r of opts.maskRects) {
-      const x0 = r.x / opts.fovNm - 0.5;
-      const y0 = (opts.fovNm - (r.y + r.h)) / opts.fovNm - 0.5;
-      const x1 = (r.x + r.w) / opts.fovNm - 0.5;
-      const y1 = (opts.fovNm - r.y) / opts.fovNm - 0.5;
-      const p0 = project(x0, y0, maskZTop + 0.002);
-      const p1 = project(x1, y0, maskZTop + 0.002);
-      const p2 = project(x1, y1, maskZTop + 0.002);
-      const p3 = project(x0, y1, maskZTop + 0.002);
-      ctx.beginPath();
-      ctx.moveTo(p0.sx, p0.sy);
-      ctx.lineTo(p1.sx, p1.sy);
-      ctx.lineTo(p2.sx, p2.sy);
-      ctx.lineTo(p3.sx, p3.sy);
-      ctx.closePath();
+    if (opts.finalMaskContours.length) {
+      const clip = new Path2D();
+      for (const contour of opts.finalMaskContours) {
+        const pts = contour.points_nm ?? [];
+        if (pts.length < 3) continue;
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          const q = project(p.x / opts.fovNm - 0.5, (opts.fovNm - p.y) / opts.fovNm - 0.5, maskZTop + 0.0022);
+          if (i === 0) clip.moveTo(q.sx, q.sy);
+          else clip.lineTo(q.sx, q.sy);
+        }
+        clip.closePath();
+      }
       const apertureTone = apertureAlpha * (isRevealMask ? 0.5 : 0.58);
-      const aperture = ctx.createLinearGradient(p0.sx, p0.sy, p2.sx, p2.sy);
+      const aperture = ctx.createLinearGradient(top.p0.sx, top.p0.sy, top.p2.sx, top.p2.sy);
       aperture.addColorStop(0, `rgba(242,226,236,${Math.max(0, apertureTone - 0.08)})`);
       aperture.addColorStop(0.45, `rgba(224,178,206,${Math.max(0, apertureTone - 0.12)})`);
       aperture.addColorStop(1, `rgba(208,136,178,${Math.max(0, apertureTone - 0.16)})`);
+      ctx.save();
+      ctx.clip(clip, "evenodd");
       ctx.fillStyle = aperture;
       ctx.shadowColor = `rgba(224,122,176,${isRevealMask ? 0.04 : 0.08})`;
       ctx.shadowBlur = isRevealMask ? 2 : 4;
+      ctx.beginPath();
+      ctx.moveTo(top.p0.sx, top.p0.sy);
+      ctx.lineTo(top.p1.sx, top.p1.sy);
+      ctx.lineTo(top.p2.sx, top.p2.sy);
+      ctx.lineTo(top.p3.sx, top.p3.sy);
+      ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = `rgba(86,38,78,${isRevealMask ? 0.31 : 0.47})`;
-      ctx.lineWidth = 0.98;
+
+      ctx.save();
+      ctx.clip(clip, "evenodd");
+      ctx.strokeStyle = `rgba(255,235,244,${isRevealMask ? 0.07 : 0.11})`;
+      ctx.lineWidth = 0.8;
+      for (let t = -Math.max(wPx, hPx); t < Math.max(wPx, hPx) * 1.5; t += 10) {
+        ctx.beginPath();
+        ctx.moveTo(t, -24);
+        ctx.lineTo(t + Math.max(wPx, hPx) * 0.42, hPx + 24);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
+    for (const contour of opts.finalMaskContours) {
+      const pts = contour.points_nm ?? [];
+      if (pts.length < 2) continue;
+      ctx.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const q = project(p.x / opts.fovNm - 0.5, (opts.fovNm - p.y) / opts.fovNm - 0.5, maskZTop + 0.0034);
+        if (i === 0) ctx.moveTo(q.sx, q.sy);
+        else ctx.lineTo(q.sx, q.sy);
+      }
+      ctx.strokeStyle = `rgba(76,34,64,${isRevealMask ? 0.38 : 0.56})`;
+      ctx.lineWidth = 1.08;
       ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       ctx.stroke();
-      ctx.strokeStyle = `rgba(255,226,242,${isRevealMask ? 0.55 : 0.73})`;
-      ctx.lineWidth = 0.68;
+      ctx.strokeStyle = `rgba(255,232,242,${isRevealMask ? 0.62 : 0.84})`;
+      ctx.lineWidth = 0.72;
       ctx.lineJoin = "round";
+      ctx.lineCap = "round";
       ctx.stroke();
     }
+
     return top;
   }
 
@@ -2456,6 +3215,32 @@ function drawSurface3D(
   ctx.closePath();
   ctx.clip();
 
+  if (opts.showTargetOverlay && opts.targetContours.length) {
+    drawContourOnSurface(ctx, opts.targetContours, opts.fovNm, w, h, data, vmin, span, {
+      azimuthDeg: opts.azimuthDeg,
+      elevationDeg: opts.elevationDeg,
+      rollDeg: opts.rollDeg,
+      offsetX: opts.offsetX,
+      offsetY: opts.offsetY,
+      offsetZ: opts.offsetZ,
+      zoomScale: opts.zoomScale,
+      depthScale: opts.depthScale,
+      wPx,
+      hPx,
+      baseZ: siliconZ + 0.0006,
+      featureBoost: surfaceFeatureBoost,
+    }, {
+      underStroke: "rgba(12,44,46,0.62)",
+      underWidth: 3,
+      mainStroke: "rgba(98,242,214,0.96)",
+      mainWidth: 1.45,
+      dash: [5, 3],
+      glowColor: "rgba(98,242,214,0.24)",
+      glowBlur: 3.8,
+      nmPerPixel: opts.nmPerPixel,
+    });
+  }
+
   if (opts.showMainContour) {
     drawContourOnSurface(ctx, opts.contours, opts.fovNm, w, h, data, vmin, span, {
       azimuthDeg: opts.azimuthDeg,
@@ -2581,46 +3366,6 @@ function drawSurface3D(
     }
     ctx.restore();
   }
-
-  const badgeText = "Mask to Silicon · Pro";
-  const badgeX = 14;
-  const badgeY = 10;
-  const badgeH = 24;
-  ctx.save();
-  ctx.font = '600 11.5px "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-  const textW = ctx.measureText(badgeText).width;
-  const badgeW = Math.max(146, Math.ceil(textW + 34));
-  const badgeR = 12;
-  const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
-  badgeGrad.addColorStop(0, "rgba(255,255,255,0.84)");
-  badgeGrad.addColorStop(1, "rgba(236,242,251,0.74)");
-  ctx.shadowColor = "rgba(10,18,30,0.24)";
-  ctx.shadowBlur = 10;
-  ctx.beginPath();
-  ctx.moveTo(badgeX + badgeR, badgeY);
-  ctx.lineTo(badgeX + badgeW - badgeR, badgeY);
-  ctx.quadraticCurveTo(badgeX + badgeW, badgeY, badgeX + badgeW, badgeY + badgeR);
-  ctx.lineTo(badgeX + badgeW, badgeY + badgeH - badgeR);
-  ctx.quadraticCurveTo(badgeX + badgeW, badgeY + badgeH, badgeX + badgeW - badgeR, badgeY + badgeH);
-  ctx.lineTo(badgeX + badgeR, badgeY + badgeH);
-  ctx.quadraticCurveTo(badgeX, badgeY + badgeH, badgeX, badgeY + badgeH - badgeR);
-  ctx.lineTo(badgeX, badgeY + badgeR);
-  ctx.quadraticCurveTo(badgeX, badgeY, badgeX + badgeR, badgeY);
-  ctx.closePath();
-  ctx.fillStyle = badgeGrad;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(214,224,238,0.68)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(badgeX + 12, badgeY + badgeH * 0.5, 3.4, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,157,64,0.96)";
-  ctx.fill();
-  ctx.fillStyle = "rgba(28,40,58,0.9)";
-  ctx.textBaseline = "middle";
-  ctx.fillText(badgeText, badgeX + 21, badgeY + badgeH * 0.5 + 0.5);
-  ctx.restore();
 
   // Vignette and frame finish
   const v = ctx.createRadialGradient(wPx * 0.5, hPx * 0.5, hPx * 0.25, wPx * 0.5, hPx * 0.5, hPx * 0.9);
@@ -2884,6 +3629,124 @@ function fitDenseLineCountInFov(cdNm: number, pitchNm: number, requestedN: numbe
   return Math.max(1, Math.min(nReq, maxN));
 }
 
+function isSquareTemplate(templateId: SimRequest["mask"]["template_id"] | undefined): boolean {
+  return templateId === "CONTACT_RAW" || templateId === "CONTACT_OPC_SERIF";
+}
+
+function isSteppedTemplate(templateId: SimRequest["mask"]["template_id"] | undefined): boolean {
+  return templateId === "STAIRCASE" || templateId === "STAIRCASE_OPC";
+}
+
+function pushRect(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  rects.push({ x, y, w, h });
+}
+
+function appendLShapeRaw(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+) {
+  const cd = p.cd_nm ?? 92;
+  const horiz = p.length_nm ?? 470;
+  const vert = p.arm_nm ?? 432;
+  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
+  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
+  pushRect(rects, elbowX - horiz, elbowY - cd, horiz, cd);
+  pushRect(rects, elbowX - cd, elbowY - vert, cd, vert);
+}
+
+function appendLShapeOpc(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+) {
+  const cd = p.cd_nm ?? 92;
+  const horiz = p.length_nm ?? 470;
+  const vert = p.arm_nm ?? 432;
+  const elbowX = cx + (p.elbow_x_offset_nm ?? 170);
+  const elbowY = cy + (p.elbow_y_offset_nm ?? 132);
+  const horizExt = p.opc_h_ext_nm ?? 26;
+  const vertExt = p.opc_v_ext_nm ?? 30;
+  const bias = p.opc_bias_nm ?? 14;
+  const serif = p.serif_nm ?? 18;
+  const leftHammerW = p.left_hammer_w_nm ?? 28;
+  const leftHammerH = p.left_hammer_h_nm ?? 124;
+  const bottomHammerW = p.bottom_hammer_w_nm ?? 146;
+  const bottomHammerH = p.bottom_hammer_h_nm ?? 28;
+
+  const horizH = cd + bias;
+  const vertW = cd + bias;
+  const xh = elbowX - horiz - horizExt;
+  const yh = elbowY - cd - bias * 0.5;
+  const xv = elbowX - cd - bias * 0.5;
+  const yv = elbowY - vert - vertExt;
+  pushRect(rects, xh, yh, horiz + horizExt, horizH);
+  pushRect(rects, xv, yv, vertW, vert + vertExt);
+  pushRect(rects, xh - 22, yh - 16, leftHammerW, leftHammerH);
+  pushRect(rects, xv - 18, yv - 20, bottomHammerW, bottomHammerH);
+  pushRect(rects, elbowX - serif * 0.28, elbowY - serif * 0.28, serif, serif);
+}
+
+function appendSteppedTrack(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  x: number,
+  y: number,
+  thickness: number,
+  run: number[],
+  rise: number[],
+) {
+  let nextX = x;
+  let nextY = y;
+  for (let i = 0; i < run.length; i++) {
+    pushRect(rects, nextX, nextY, run[i], thickness);
+    if (i >= rise.length) continue;
+    nextX = nextX + run[i] - thickness;
+    pushRect(rects, nextX, nextY - rise[i], thickness, rise[i] + thickness);
+    nextY -= rise[i];
+  }
+}
+
+function appendSteppedInterconnectRaw(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+) {
+  const run = p.step_w_nm ?? 180;
+  const rise = p.step_h_nm ?? 110;
+  const thickness = p.thickness_nm ?? p.cd_nm ?? 88;
+  appendSteppedTrack(rects, cx - 300, cy + 90, thickness, [run, run, run + 30], [rise, rise]);
+}
+
+function appendSteppedInterconnectOpc(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  p: Record<string, number>,
+  cx: number,
+  cy: number,
+) {
+  const run = p.step_w_nm ?? 180;
+  const rise = p.step_h_nm ?? 110;
+  const thickness = p.thickness_nm ?? p.cd_nm ?? 88;
+  const bias = p.opc_bias_nm ?? 12;
+  const endExt = p.end_extension_nm ?? 24;
+  const serif = p.serif_nm ?? 18;
+  const thick = thickness + bias;
+  const x0 = cx - 312 - endExt * 0.5;
+  const y0 = cy + 90;
+
+  appendSteppedTrack(rects, x0, y0, thick, [run + endExt, run + 12, run + 30 + endExt], [rise, rise]);
+  pushRect(rects, x0 + run - serif * 0.2, y0 - rise + thick - serif * 0.55, serif, serif);
+  pushRect(rects, x0 + run + run - thick + 8, y0 - rise - rise + thick - serif * 0.55, serif, serif);
+}
+
 function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: number; y: number; w: number; h: number }> {
   const t = req.mask.template_id;
   const p = req.mask.params_nm ?? {};
@@ -2894,6 +3757,7 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
 
   if (req.mask.mode === "CUSTOM") {
     for (const shape of req.mask.shapes ?? []) {
+      if (getShapeOp(shape) === "subtract") continue;
       if (shape.type === "rect") {
         rects.push({ x: shape.x_nm, y: shape.y_nm, w: shape.w_nm, h: shape.h_nm });
       } else if (shape.type === "polygon" && shape.points_nm.length >= 3) {
@@ -2946,30 +3810,11 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   else if (t === "L_CORNER_RAW") {
-    const arm = p.arm_nm ?? 700;
-    const cd = p.cd_nm ?? 100;
-    rects.push({ x: cx - arm / 2, y: cy - cd / 2, w: arm, h: cd });
-    rects.push({ x: cx - cd / 2, y: cy - arm / 2, w: cd, h: arm });
+    appendLShapeRaw(rects, p, cx, cy);
   }
 
   else if (t === "L_CORNER_OPC_SERIF") {
-    const arm = p.arm_nm ?? 700;
-    const cd = p.cd_nm ?? 100;
-    const serif = p.serif_nm ?? Math.max(0.4 * cd, 20);
-    const xh = cx - arm / 2;
-    const yh = cy - cd / 2;
-    const xv = cx - cd / 2;
-    const yv = cy - arm / 2;
-    rects.push({ x: xh, y: yh, w: arm, h: cd });
-    rects.push({ x: xv, y: yv, w: cd, h: arm });
-    rects.push({ x: xh - serif / 2, y: yh - serif / 2, w: serif, h: serif });
-    rects.push({ x: xh + arm - serif / 2, y: yh - serif / 2, w: serif, h: serif });
-    rects.push({ x: xh - serif / 2, y: yh + cd - serif / 2, w: serif, h: serif });
-    rects.push({ x: xh + arm - serif / 2, y: yh + cd - serif / 2, w: serif, h: serif });
-    rects.push({ x: xv - serif / 2, y: yv - serif / 2, w: serif, h: serif });
-    rects.push({ x: xv - serif / 2, y: yv + arm - serif / 2, w: serif, h: serif });
-    rects.push({ x: xv + cd - serif / 2, y: yv - serif / 2, w: serif, h: serif });
-    rects.push({ x: xv + cd - serif / 2, y: yv + arm - serif / 2, w: serif, h: serif });
+    appendLShapeOpc(rects, p, cx, cy);
   }
 
   else if (t === "CONTACT_RAW") {
@@ -2989,16 +3834,11 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
   }
 
   else if (t === "STAIRCASE") {
-    const stepW = p.step_w_nm ?? 40;
-    const stepH = p.step_h_nm ?? 40;
-    const n = Math.max(1, Math.floor(p.n_steps ?? 12));
-    const thickness = p.thickness_nm ?? p.cd_nm ?? 100;
-    const x0 = cx - (n * stepW) / 2;
-    const y0 = cy - (n * stepH) / 2;
-    for (let i = 0; i < n; i++) {
-      rects.push({ x: x0 + i * stepW, y: y0 + i * stepH, w: stepW, h: thickness });
-      rects.push({ x: x0 + i * stepW, y: y0 + i * stepH, w: thickness, h: stepH });
-    }
+    appendSteppedInterconnectRaw(rects, p, cx, cy);
+  }
+
+  else if (t === "STAIRCASE_OPC") {
+    appendSteppedInterconnectOpc(rects, p, cx, cy);
   }
 
   else {
@@ -3013,6 +3853,17 @@ function maskRectsFromTemplate(req: SimRequest, fovNm: number): Array<{ x: numbe
     const srafOff = p.sraf_offset_nm ?? 80;
     rects.push({ x: cx - srafOff - srafW / 2, y: cy - srafW / 2, w: srafW, h: srafW });
     rects.push({ x: cx + srafOff - srafW / 2, y: cy - srafW / 2, w: srafW, h: srafW });
+  }
+
+  for (const shape of req.mask.shapes ?? []) {
+    if (getShapeOp(shape) === "subtract") continue;
+    if (shape.type === "rect") {
+      rects.push({ x: shape.x_nm, y: shape.y_nm, w: shape.w_nm, h: shape.h_nm });
+    } else if (shape.type === "polygon" && shape.points_nm.length >= 3) {
+      const xs = shape.points_nm.map((pt) => pt.x_nm);
+      const ys = shape.points_nm.map((pt) => pt.y_nm);
+      rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+    }
   }
 
   return rects;
@@ -3032,6 +3883,133 @@ function rectsToClosedContours(rects: Array<{ x: number; y: number; w: number; h
       { x: r.x, y: r.y },
     ],
   }));
+}
+
+function rectBooleanContours(
+  addRects: Array<{ x: number; y: number; w: number; h: number }>,
+  subtractRects: Array<{ x: number; y: number; w: number; h: number }>
+): Array<{ points_nm: Array<{ x: number; y: number }> }> {
+  if (!addRects.length) return [];
+  const xs = Array.from(new Set(addRects.concat(subtractRects).flatMap((r) => [r.x, r.x + r.w]))).sort((a, b) => a - b);
+  const ys = Array.from(new Set(addRects.concat(subtractRects).flatMap((r) => [r.y, r.y + r.h]))).sort((a, b) => a - b);
+  if (xs.length < 2 || ys.length < 2) return rectsToClosedContours(addRects);
+
+  const filled = new Set<string>();
+  for (let yi = 0; yi < ys.length - 1; yi++) {
+    const y0 = ys[yi];
+    const y1 = ys[yi + 1];
+    const cy = (y0 + y1) * 0.5;
+    for (let xi = 0; xi < xs.length - 1; xi++) {
+      const x0 = xs[xi];
+      const x1 = xs[xi + 1];
+      const cx = (x0 + x1) * 0.5;
+      const inAdd = addRects.some((r) => cx > r.x && cx < r.x + r.w && cy > r.y && cy < r.y + r.h);
+      if (!inAdd) continue;
+      const inSubtract = subtractRects.some((r) => cx > r.x && cx < r.x + r.w && cy > r.y && cy < r.y + r.h);
+      if (!inSubtract) filled.add(`${xi},${yi}`);
+    }
+  }
+  if (!filled.size) return [];
+
+  const edges: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = [];
+  const has = (xi: number, yi: number) => filled.has(`${xi},${yi}`);
+  for (let yi = 0; yi < ys.length - 1; yi++) {
+    for (let xi = 0; xi < xs.length - 1; xi++) {
+      if (!has(xi, yi)) continue;
+      const x0 = xs[xi];
+      const x1 = xs[xi + 1];
+      const y0 = ys[yi];
+      const y1 = ys[yi + 1];
+      if (!has(xi, yi - 1)) edges.push({ from: { x: x0, y: y0 }, to: { x: x1, y: y0 } });
+      if (!has(xi + 1, yi)) edges.push({ from: { x: x1, y: y0 }, to: { x: x1, y: y1 } });
+      if (!has(xi, yi + 1)) edges.push({ from: { x: x1, y: y1 }, to: { x: x0, y: y1 } });
+      if (!has(xi - 1, yi)) edges.push({ from: { x: x0, y: y1 }, to: { x: x0, y: y0 } });
+    }
+  }
+
+  const keyOf = (p: { x: number; y: number }) => `${p.x.toFixed(4)},${p.y.toFixed(4)}`;
+  const startMap = new Map<string, number[]>();
+  edges.forEach((edge, idx) => {
+    const key = keyOf(edge.from);
+    const list = startMap.get(key);
+    if (list) list.push(idx);
+    else startMap.set(key, [idx]);
+  });
+  const used = new Set<number>();
+  const contours: Array<{ points_nm: Array<{ x: number; y: number }> }> = [];
+
+  for (let i = 0; i < edges.length; i++) {
+    if (used.has(i)) continue;
+    used.add(i);
+    const points = [edges[i].from, edges[i].to];
+    let current = edges[i].to;
+    const startKey = keyOf(edges[i].from);
+    while (keyOf(current) !== startKey) {
+      const nextList = startMap.get(keyOf(current)) ?? [];
+      const nextIdx = nextList.find((idx) => !used.has(idx));
+      if (nextIdx == null) break;
+      used.add(nextIdx);
+      current = edges[nextIdx].to;
+      points.push(current);
+    }
+    const simplified = simplifyOrthogonalLoop(points);
+    if (simplified.length >= 4) contours.push({ points_nm: simplified });
+  }
+  return contours;
+}
+
+function simplifyOrthogonalLoop(points: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+  if (points.length <= 2) return points;
+  const deduped: Array<{ x: number; y: number }> = [];
+  for (const point of points) {
+    const prev = deduped[deduped.length - 1];
+    if (!prev || prev.x !== point.x || prev.y !== point.y) deduped.push(point);
+  }
+  if (deduped.length > 1) {
+    const first = deduped[0];
+    const last = deduped[deduped.length - 1];
+    if (first.x !== last.x || first.y !== last.y) deduped.push({ ...first });
+  }
+  let changed = true;
+  while (changed && deduped.length >= 4) {
+    changed = false;
+    for (let i = 1; i < deduped.length - 1; i++) {
+      const a = deduped[i - 1];
+      const b = deduped[i];
+      const c = deduped[i + 1];
+      const collinear = (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
+      if (collinear) {
+        deduped.splice(i, 1);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return deduped;
+}
+
+function rectsToMaskShapes(rects: Array<{ x: number; y: number; w: number; h: number }>): Array<MaskShape> {
+  return rects.map((rect) => ({ type: "rect", x_nm: rect.x, y_nm: rect.y, w_nm: rect.w, h_nm: rect.h }));
+}
+
+function shapesToRects(shapes: Array<MaskShape>): Array<{ x: number; y: number; w: number; h: number }> {
+  const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  for (const shape of shapes) {
+    if (shape.type === "rect") {
+      rects.push({ x: shape.x_nm, y: shape.y_nm, w: shape.w_nm, h: shape.h_nm });
+      continue;
+    }
+    if (shape.points_nm.length < 3) continue;
+    const xs = shape.points_nm.map((point) => point.x_nm);
+    const ys = shape.points_nm.map((point) => point.y_nm);
+    rects.push({ x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+  }
+  return rects;
+}
+
+function cloneViewportShape(shape: MaskShape): MaskShape {
+  if (shape.type === "rect") return { ...shape };
+  return { ...shape, points_nm: shape.points_nm.map((point) => ({ ...point })) };
 }
 
 function buildSweepMaskRequest(baseReq: SimRequest, param: SweepParam, value: number, customTargetIndex: number): SimRequest {
@@ -3075,9 +4053,9 @@ function buildSweepMaskRequest(baseReq: SimRequest, param: SweepParam, value: nu
   }
   if (param === "width") {
     const t = next.mask.template_id;
-    if (t === "CONTACT_RAW" || t === "CONTACT_OPC_SERIF") {
+    if (isSquareTemplate(t)) {
       next.mask.params_nm.w_nm = value;
-    } else if (t === "STAIRCASE") {
+    } else if (isSteppedTemplate(t)) {
       next.mask.params_nm.thickness_nm = value;
     } else {
       next.mask.params_nm.cd_nm = value;
@@ -3086,7 +4064,7 @@ function buildSweepMaskRequest(baseReq: SimRequest, param: SweepParam, value: nu
   }
   if (param === "height") {
     const t = next.mask.template_id;
-    if (t === "STAIRCASE") next.mask.params_nm.step_h_nm = value;
+    if (isSteppedTemplate(t)) next.mask.params_nm.step_h_nm = value;
     else next.mask.params_nm.length_nm = value;
   }
   return next;
@@ -3117,9 +4095,18 @@ function rectPath(x: number, y: number, w: number, h: number, fovNm: number): st
   return `M ${x} ${yTop} H ${x + w} V ${yBottom} H ${x} Z`;
 }
 
-function estimateMaskCdNm(req: SimRequest): number {
+function estimateMaskCdNm(req: SimRequest, resolvedMaskShapes?: Array<MaskShape>): number {
+  if (resolvedMaskShapes?.length) {
+    const shapes = resolvedMaskShapes.filter((shape) => getShapeOp(shape) !== "subtract");
+    if (!shapes.length) return 100;
+    const first = shapes[0];
+    if (first.type === "rect") return Math.max(1, first.w_nm);
+    const xs = first.points_nm.map((p) => p.x_nm);
+    if (!xs.length) return 100;
+    return Math.max(1, Math.max(...xs) - Math.min(...xs));
+  }
   if (req.mask.mode === "CUSTOM") {
-    const shapes = req.mask.shapes ?? [];
+    const shapes = (req.mask.shapes ?? []).filter((shape) => getShapeOp(shape) !== "subtract");
     if (!shapes.length) return 100;
     const first = shapes[0];
     if (first.type === "rect") return Math.max(1, first.w_nm);
@@ -3129,8 +4116,8 @@ function estimateMaskCdNm(req: SimRequest): number {
   }
   const p = req.mask.params_nm ?? {};
   const t = req.mask.template_id;
-  if (t === "CONTACT_RAW" || t === "CONTACT_OPC_SERIF") return p.w_nm ?? p.cd_nm ?? 100;
-  if (t === "STAIRCASE") return p.thickness_nm ?? p.cd_nm ?? 100;
+  if (isSquareTemplate(t)) return p.w_nm ?? p.cd_nm ?? 100;
+  if (isSteppedTemplate(t)) return p.thickness_nm ?? p.cd_nm ?? 88;
   return p.cd_nm ?? 100;
 }
 
@@ -3199,21 +4186,22 @@ function CdRuler(props: {
   x0: number;
   x1: number;
   y: number;
+  axis: "H" | "V";
   color: string;
   label: string;
   labelDy: number;
   zoomScale: number;
   onGrab: (
-    target: "mask-left" | "mask-right" | "mask-line" | "contour-left" | "contour-right" | "contour-line",
+    target: "mask-start" | "mask-end" | "mask-line" | "contour-start" | "contour-end" | "contour-line",
     p: { x: number; y: number }
   ) => void;
   handlePrefix: "mask" | "contour";
   selected: boolean;
 }) {
-  const { x0, x1, y, color, label, labelDy, zoomScale, onGrab, handlePrefix, selected } = props;
+  const { x0, x1, y, axis, color, label, labelDy, zoomScale, onGrab, handlePrefix, selected } = props;
   const invZoom = 1 / Math.max(0.25, Math.min(16, zoomScale || 1));
   const tick = 6 * invZoom;
-  const centerX = (x0 + x1) * 0.5;
+  const centerPrimary = (x0 + x1) * 0.5;
   const fontSize = (selected ? 23 : 20) * invZoom;
   const labelColor =
     handlePrefix === "contour"
@@ -3223,34 +4211,52 @@ function CdRuler(props: {
       : selected
         ? "rgba(255,132,184,0.98)"
         : "rgba(246,119,174,0.94)";
-  const leftTarget = `${handlePrefix}-left` as
-    | "mask-left"
-    | "mask-right"
+  const startTarget = `${handlePrefix}-start` as
+    | "mask-start"
+    | "mask-end"
     | "mask-line"
-    | "contour-left"
-    | "contour-right"
+    | "contour-start"
+    | "contour-end"
     | "contour-line";
-  const rightTarget = `${handlePrefix}-right` as
-    | "mask-left"
-    | "mask-right"
+  const endTarget = `${handlePrefix}-end` as
+    | "mask-start"
+    | "mask-end"
     | "mask-line"
-    | "contour-left"
-    | "contour-right"
+    | "contour-start"
+    | "contour-end"
     | "contour-line";
   const lineTarget = `${handlePrefix}-line` as
-    | "mask-left"
-    | "mask-right"
+    | "mask-start"
+    | "mask-end"
     | "mask-line"
-    | "contour-left"
-    | "contour-right"
+    | "contour-start"
+    | "contour-end"
     | "contour-line";
+  const isH = axis === "H";
+  const lineX1 = isH ? x0 : y;
+  const lineY1 = isH ? y : x0;
+  const lineX2 = isH ? x1 : y;
+  const lineY2 = isH ? y : x1;
+  const tickAX1 = isH ? x0 : y - tick;
+  const tickAY1 = isH ? y - tick : x0;
+  const tickAX2 = isH ? x0 : y + tick;
+  const tickAY2 = isH ? y + tick : x0;
+  const tickBX1 = isH ? x1 : y - tick;
+  const tickBY1 = isH ? y - tick : x1;
+  const tickBX2 = isH ? x1 : y + tick;
+  const tickBY2 = isH ? y + tick : x1;
+  const handleA = { x: isH ? x0 : y, y: isH ? y : x0 };
+  const handleB = { x: isH ? x1 : y, y: isH ? y : x1 };
+  const labelX = isH ? centerPrimary : y + labelDy * invZoom;
+  const labelY = isH ? y + labelDy * invZoom : centerPrimary;
+  const labelAnchor = isH ? "middle" : "start";
   return (
     <g>
       <line
-        x1={x0}
-        y1={y}
-        x2={x1}
-        y2={y}
+        x1={lineX1}
+        y1={lineY1}
+        x2={lineX2}
+        y2={lineY2}
         stroke={color}
         strokeWidth={(selected ? 2.2 : 1.7) * invZoom}
         style={{ cursor: "move" }}
@@ -3259,37 +4265,37 @@ function CdRuler(props: {
           onGrab(lineTarget, { x: e.clientX, y: e.clientY });
         }}
       />
-      <line x1={x0} y1={y - tick} x2={x0} y2={y + tick} stroke={color} strokeWidth={(selected ? 2.2 : 1.7) * invZoom} />
-      <line x1={x1} y1={y - tick} x2={x1} y2={y + tick} stroke={color} strokeWidth={(selected ? 2.2 : 1.7) * invZoom} />
+      <line x1={tickAX1} y1={tickAY1} x2={tickAX2} y2={tickAY2} stroke={color} strokeWidth={(selected ? 2.2 : 1.7) * invZoom} />
+      <line x1={tickBX1} y1={tickBY1} x2={tickBX2} y2={tickBY2} stroke={color} strokeWidth={(selected ? 2.2 : 1.7) * invZoom} />
       <circle
-        cx={x0}
-        cy={y}
+        cx={handleA.x}
+        cy={handleA.y}
         r={(selected ? 5 : 4.2) * invZoom}
         fill={color}
-        style={{ cursor: "ew-resize" }}
+        style={{ cursor: isH ? "ew-resize" : "ns-resize" }}
         onMouseDown={(e) => {
           e.stopPropagation();
-          onGrab(leftTarget, { x: e.clientX, y: e.clientY });
+          onGrab(startTarget, { x: e.clientX, y: e.clientY });
         }}
       />
       <circle
-        cx={x1}
-        cy={y}
+        cx={handleB.x}
+        cy={handleB.y}
         r={(selected ? 5 : 4.2) * invZoom}
         fill={color}
-        style={{ cursor: "ew-resize" }}
+        style={{ cursor: isH ? "ew-resize" : "ns-resize" }}
         onMouseDown={(e) => {
           e.stopPropagation();
-          onGrab(rightTarget, { x: e.clientX, y: e.clientY });
+          onGrab(endTarget, { x: e.clientX, y: e.clientY });
         }}
       />
       <text
-        x={centerX}
-        y={y + labelDy * invZoom}
+        x={labelX}
+        y={labelY}
         fill={labelColor}
         fontSize={fontSize}
         fontWeight={selected ? 610 : 560}
-        textAnchor="middle"
+        textAnchor={labelAnchor}
         style={{ letterSpacing: 0.02, opacity: selected ? 1 : 0.92 }}
       >
         {label}
@@ -3395,34 +4401,116 @@ function RulerNumericEditor(props: {
 function snapRulerToRectEdges(
   ruler: { x0: number; x1: number; y: number },
   rects: Array<{ x: number; y: number; w: number; h: number }>,
-  fovNm: number
+  fovNm: number,
+  axis: "H" | "V"
 ) {
-  const xs = intersectionsWithRectsAtY(rects, ruler.y, fovNm);
-  const pair = pickIntersectionPair(xs, (ruler.x0 + ruler.x1) * 0.5);
-  if (!pair) return ruler;
-  return { ...ruler, x0: pair[0], x1: pair[1] };
+  const center = (ruler.x0 + ruler.x1) * 0.5;
+  const pairAtScan = (scan: number) => {
+    const hits = axis === "H"
+      ? intersectionsWithRectsAtY(rects, scan, fovNm)
+      : intersectionsWithRectsAtX(rects, scan, fovNm);
+    return pickIntersectionPair(hits, center);
+  };
+
+  const directPair = pairAtScan(ruler.y);
+  if (directPair) return { ...ruler, x0: directPair[0], x1: directPair[1] };
+
+  const nearestScan = findNearestRectScan(rects, ruler.y, fovNm, axis);
+  if (nearestScan == null) return ruler;
+
+  const nearestPair = pairAtScan(nearestScan);
+  if (!nearestPair) return { ...ruler, y: nearestScan };
+  return { ...ruler, x0: nearestPair[0], x1: nearestPair[1], y: nearestScan };
 }
 
 function snapRulerToContourEdges(
   ruler: { x0: number; x1: number; y: number },
   contours: Array<{ points_nm: Array<{ x: number; y: number }> }>,
-  fovNm: number
+  fovNm: number,
+  axis: "H" | "V",
+  fallbackRects: Array<{ x: number; y: number; w: number; h: number }> = []
 ) {
-  const xs: number[] = [];
-  for (const c of contours) {
-    const pts = c.points_nm;
-    if (!pts || pts.length < 2) continue;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const x1 = pts[i].x;
-      const y1 = fovNm - pts[i].y;
-      const x2 = pts[i + 1].x;
-      const y2 = fovNm - pts[i + 1].y;
-      collectSegmentIntersectionAtY(xs, x1, y1, x2, y2, ruler.y);
+  const center = (ruler.x0 + ruler.x1) * 0.5;
+  const pairAtScan = (scan: number): [number, number] | null => {
+    const hits: number[] = [];
+    for (const c of contours) {
+      const pts = c.points_nm;
+      if (!pts || pts.length < 2) continue;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const x1 = pts[i].x;
+        const y1 = fovNm - pts[i].y;
+        const x2 = pts[i + 1].x;
+        const y2 = fovNm - pts[i + 1].y;
+        if (axis === "H") collectSegmentIntersectionAtY(hits, x1, y1, x2, y2, scan);
+        else collectSegmentIntersectionAtX(hits, x1, y1, x2, y2, scan);
+      }
+    }
+    return pickIntersectionPair(hits, center);
+  };
+
+  const directPair = pairAtScan(ruler.y);
+  if (directPair) return { ...ruler, x0: directPair[0], x1: directPair[1] };
+
+  const scanAnchors: number[] = [];
+  if (fallbackRects.length) {
+    const nearest = findNearestRectScan(fallbackRects, ruler.y, fovNm, axis);
+    if (nearest != null) scanAnchors.push(nearest);
+  }
+  if (scanAnchors.length === 0) scanAnchors.push(ruler.y);
+
+  let best: { pair: [number, number]; scan: number; dist: number } | null = null;
+  const register = (scan: number, pair: [number, number] | null) => {
+    if (!pair) return;
+    const dist = Math.abs(scan - ruler.y);
+    if (!best || dist < best.dist) {
+      best = { pair, scan, dist };
+    }
+  };
+
+  for (const anchor of scanAnchors) {
+    register(anchor, pairAtScan(anchor));
+    const stepNm = 2;
+    const maxSteps = 72;
+    for (let i = 1; i <= maxSteps; i++) {
+      const delta = i * stepNm;
+      const s1 = anchor - delta;
+      const s2 = anchor + delta;
+      if (s1 >= 0) register(s1, pairAtScan(s1));
+      if (s2 <= fovNm) register(s2, pairAtScan(s2));
+      if (best) break;
+    }
+    if (best) break;
+  }
+
+  if (!best) return ruler;
+  return { ...ruler, x0: best.pair[0], x1: best.pair[1], y: best.scan };
+}
+
+function findNearestRectScan(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  scan: number,
+  fovNm: number,
+  axis: "H" | "V"
+): number | null {
+  let bestScan: number | null = null;
+  let bestDist = Number.POSITIVE_INFINITY;
+
+  for (const r of rects) {
+    const spanStart = axis === "H" ? fovNm - (r.y + r.h) : r.x;
+    const spanEnd = axis === "H" ? fovNm - r.y : (r.x + r.w);
+    const lo = Math.min(spanStart, spanEnd);
+    const hi = Math.max(spanStart, spanEnd);
+    if (hi - lo < 1e-6) continue;
+
+    const candidate = Math.max(lo, Math.min(hi, scan));
+    const dist = Math.abs(candidate - scan);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestScan = candidate;
     }
   }
-  const pair = pickIntersectionPair(xs, (ruler.x0 + ruler.x1) * 0.5);
-  if (!pair) return ruler;
-  return { ...ruler, x0: pair[0], x1: pair[1] };
+
+  return bestScan;
 }
 
 function intersectionsWithRectsAtY(
@@ -3443,6 +4531,23 @@ function intersectionsWithRectsAtY(
   return uniqueSorted(xs);
 }
 
+function intersectionsWithRectsAtX(
+  rects: Array<{ x: number; y: number; w: number; h: number }>,
+  x: number,
+  fovNm: number
+): number[] {
+  const ys: number[] = [];
+  for (const r of rects) {
+    const x0 = r.x;
+    const x1 = r.x + r.w;
+    if (!(x >= x0 && x <= x1)) continue;
+    const yTop = fovNm - (r.y + r.h);
+    const yBottom = fovNm - r.y;
+    ys.push(yTop, yBottom);
+  }
+  return uniqueSorted(ys);
+}
+
 function collectSegmentIntersectionAtY(xs: number[], x1: number, y1: number, x2: number, y2: number, y: number) {
   if (Math.abs(y2 - y1) < 1e-9) return;
   const lo = Math.min(y1, y2);
@@ -3451,6 +4556,16 @@ function collectSegmentIntersectionAtY(xs: number[], x1: number, y1: number, x2:
   const t = (y - y1) / (y2 - y1);
   if (t < 0 || t > 1) return;
   xs.push(x1 + t * (x2 - x1));
+}
+
+function collectSegmentIntersectionAtX(ys: number[], x1: number, y1: number, x2: number, y2: number, x: number) {
+  if (Math.abs(x2 - x1) < 1e-9) return;
+  const lo = Math.min(x1, x2);
+  const hi = Math.max(x1, x2);
+  if (!(x >= lo && x < hi)) return;
+  const t = (x - x1) / (x2 - x1);
+  if (t < 0 || t > 1) return;
+  ys.push(y1 + t * (y2 - y1));
 }
 
 function pickIntersectionPair(xsRaw: number[], centerX: number): [number, number] | null {

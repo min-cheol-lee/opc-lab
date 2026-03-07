@@ -9,10 +9,12 @@ export type TemplateID =
   | "LINE_END_OPC_HAMMER"
   | "L_CORNER_RAW"
   | "L_CORNER_OPC_SERIF"
-  | "STAIRCASE";
+  | "STAIRCASE"
+  | "STAIRCASE_OPC";
 
-export type RectMaskShape = { type: "rect"; x_nm: number; y_nm: number; w_nm: number; h_nm: number };
-export type PolygonMaskShape = { type: "polygon"; points_nm: Array<{ x_nm: number; y_nm: number }> };
+export type ShapeOp = "add" | "subtract";
+export type RectMaskShape = { type: "rect"; op?: ShapeOp; x_nm: number; y_nm: number; w_nm: number; h_nm: number };
+export type PolygonMaskShape = { type: "polygon"; op?: ShapeOp; points_nm: Array<{ x_nm: number; y_nm: number }> };
 export type MaskShape = RectMaskShape | PolygonMaskShape;
 
 export type SimRequest = {
@@ -27,6 +29,9 @@ export type SimRequest = {
     template_id?: TemplateID;
     params_nm: Record<string, number>;
     shapes?: Array<MaskShape>;
+    target_shapes?: Array<MaskShape>;
+    preset_feature_overrides?: Array<{ anchorIndex: number; rect: RectMaskShape }>;
+    preset_target_overrides?: Array<{ anchorIndex: number; rect: RectMaskShape }>;
   };
 };
 
@@ -52,6 +57,8 @@ export type SweepParam =
   | "height"
   | "pitch"
   | "serif";
+
+export type SweepGeometryScope = "LOCAL" | "GLOBAL";
 
 export type BatchSimRequest = {
   base: SimRequest;

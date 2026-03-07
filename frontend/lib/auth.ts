@@ -1,10 +1,21 @@
-const ACCESS_TOKEN_KEY = "opclab_access_token_v1";
-const DEV_USER_ID_KEY = "opclab_user_id_v1";
-const DEV_EMAIL_KEY = "opclab_email_v1";
+const ACCESS_TOKEN_KEY = "litopc_access_token_v1";
+const LEGACY_ACCESS_TOKEN_KEY = "opclab_access_token_v1";
+const DEV_USER_ID_KEY = "litopc_user_id_v1";
+const LEGACY_DEV_USER_ID_KEY = "opclab_user_id_v1";
+const DEV_EMAIL_KEY = "litopc_email_v1";
+const LEGACY_DEV_EMAIL_KEY = "opclab_email_v1";
+
+function getFirstLocalStorageValue(...keys: string[]): string | null {
+  if (typeof window === "undefined") return null;
+  for (const key of keys) {
+    const value = window.localStorage.getItem(key);
+    if (value) return value;
+  }
+  return null;
+}
 
 export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(ACCESS_TOKEN_KEY);
+  const raw = getFirstLocalStorageValue(ACCESS_TOKEN_KEY, LEGACY_ACCESS_TOKEN_KEY);
   if (!raw) return null;
   const token = raw.trim();
   return token.length > 0 ? token : null;
@@ -21,8 +32,7 @@ export function setAccessToken(token: string): void {
 }
 
 export function getDevUserId(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(DEV_USER_ID_KEY);
+  const raw = getFirstLocalStorageValue(DEV_USER_ID_KEY, LEGACY_DEV_USER_ID_KEY);
   if (!raw) return null;
   const userId = raw.trim();
   return userId.length > 0 ? userId : null;
@@ -39,8 +49,7 @@ export function setDevUserId(userId: string): void {
 }
 
 export function getDevEmail(): string | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(DEV_EMAIL_KEY);
+  const raw = getFirstLocalStorageValue(DEV_EMAIL_KEY, LEGACY_DEV_EMAIL_KEY);
   if (!raw) return null;
   const email = raw.trim();
   return email.length > 0 ? email : null;

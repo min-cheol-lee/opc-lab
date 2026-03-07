@@ -1,9 +1,12 @@
 {
-  "name": "opclab-frontend",
+  "name": "litopc-frontend",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:clean": "powershell -NoProfile -Command \"if (Test-Path .next) { try { Remove-Item .next -Recurse -Force -ErrorAction Stop } catch { Write-Host 'Skipping .next cleanup because it is in use.' } }\"; next dev"
+    "dev:clean": "powershell -NoProfile -Command \"if (Test-Path .next) { try { Remove-Item .next -Recurse -Force -ErrorAction Stop } catch { Write-Host 'Skipping .next cleanup because it is in use.' } }\"; next dev",
+    "build": "next build",
+    "report:fonts": "node scripts/report-font-usage.mjs",
+    "report:fonts:build": "powershell -NoProfile -Command \"$env:NEXT_DIST_DIR='.next-font-report'; next build; if ($LASTEXITCODE -eq 0) { node scripts/report-font-usage.mjs }\""
   },
   "dependencies": {
     "next": "^14.2.0",

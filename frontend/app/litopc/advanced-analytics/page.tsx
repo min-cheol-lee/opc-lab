@@ -32,12 +32,12 @@ export default function AdvancedAnalyticsPage() {
           Phase 2 skeleton for Bossung curve and process window map. This preview is UI-only with sample data.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a className="model-guide-link" href="/opclab/model-summary">Model Guide</a>
-          <a className="model-guide-link" href="/opclab/benchmark-gallery">Benchmark Gallery</a>
-          <a className="model-guide-link" href="/opclab/model-change-log">Model Change Log</a>
-          <a className="model-guide-link" href="/opclab/trust-dashboard">Trust Dashboard</a>
-          <a className="model-guide-link" href="/opclab/revenue-dashboard">Revenue Dashboard</a>
-          <a className="model-guide-link" href="/opclab">Back to Lab</a>
+          <a className="model-guide-link" href="/litopc/model-summary">Model Guide</a>
+          <a className="model-guide-link" href="/litopc/benchmark-gallery">Benchmark Gallery</a>
+          <a className="model-guide-link" href="/litopc/model-change-log">Model Change Log</a>
+          <a className="model-guide-link" href="/litopc/trust-dashboard">Trust Dashboard</a>
+          <a className="model-guide-link" href="/litopc/revenue-dashboard">Revenue Dashboard</a>
+          <a className="model-guide-link" href="/litopc">Back to Lab</a>
         </div>
       </header>
 

@@ -31,7 +31,7 @@ Status: Draft (Phase 2C candidate; gated by 2A/2B)
   - repeatable benchmark regression checks running
 
 ## 4) MVP UX Scope
-- New page: `/opclab/advanced-analytics`
+- New page: `/litopc/advanced-analytics`
 - Two tabs:
   - `Bossung`:
     - dose set input (e.g. 0.35, 0.45, 0.55)

@@ -1,6 +1,6 @@
 import "./globals.css";
 import React from "react";
-import { Inter, Montserrat } from "next/font/google";
+import { Inter, Jost } from "next/font/google";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -8,22 +8,23 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const montserrat = Montserrat({
+const jost = Jost({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-montserrat",
-  weight: ["400"],
+  variable: "--font-jost",
+  weight: ["900"],
+  style: ["italic"],
 });
 
 export const metadata = {
-  title: "OPC Lab",
-  description: "Educational OPC / lithography sandbox",
+  title: "litopc",
+  description: "Educational optical proximity correction sandbox",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${montserrat.variable}`}>{children}</body>
+      <body className={`${inter.variable} ${jost.variable}`}>{children}</body>
     </html>
   );
 }

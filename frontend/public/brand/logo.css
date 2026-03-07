@@ -1,0 +1,112 @@
+:root {
+  --logo-artboard: min(84vmin, 720px);
+  --logo-h: clamp(88px, 11.2vmin, 132px);
+  --logo-main-tracking: 0.01em;
+  --logo-main-opc-weight: 600;
+  --logo-main-lab-weight: 400;
+  --logo-divider-thickness: clamp(1px, calc(var(--logo-h) * 0.016), 2px);
+  --logo-gap-main-divider: calc(var(--logo-h) * 0.20);
+  --logo-divider-ratio: 0.93;
+  --logo-gap-divider-tagline: calc(var(--logo-h) * 0.32);
+  --logo-tagline-size: calc(var(--logo-h) * 0.31);
+  --logo-tagline-weight: 300;
+  --logo-tagline-tracking: 0.04em;
+  --logo-bg: #000;
+  --logo-fg: #fff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--logo-bg);
+  color: var(--logo-fg);
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.logo-grid {
+  display: grid;
+  gap: 24px;
+  justify-items: center;
+}
+
+.logo-artboard {
+  width: var(--logo-artboard);
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  background: var(--logo-bg);
+  color: var(--logo-fg);
+  border-radius: 18px;
+  outline: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wordmark-logo {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  width: min(78%, 620px);
+  color: currentColor;
+  shape-rendering: geometricPrecision;
+}
+
+.wordmark-main {
+  margin: 0;
+  font-size: var(--logo-h);
+  line-height: 1;
+  letter-spacing: var(--logo-main-tracking);
+  text-align: center;
+  color: currentColor;
+  white-space: nowrap;
+}
+
+.wordmark-main .opc {
+  font-weight: var(--logo-main-opc-weight);
+}
+
+.wordmark-main .lab {
+  font-weight: var(--logo-main-lab-weight);
+}
+
+.wordmark-divider {
+  width: calc(100% * var(--logo-divider-ratio));
+  height: var(--logo-divider-thickness);
+  margin-top: var(--logo-gap-main-divider);
+  margin-bottom: var(--logo-gap-divider-tagline);
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.wordmark-tagline {
+  margin: 0;
+  font-size: var(--logo-tagline-size);
+  line-height: 1;
+  font-weight: var(--logo-tagline-weight);
+  letter-spacing: var(--logo-tagline-tracking);
+  text-align: center;
+  color: currentColor;
+  white-space: nowrap;
+}
+
+.variant-opc500 .wordmark-main .opc {
+  font-weight: 500;
+}
+
+.variant-label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.68);
+  margin-top: 8px;
+}

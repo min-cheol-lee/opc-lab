@@ -7,13 +7,13 @@ Scope rule:
 ---
 
 ## Sprint Goal
-- Turn OPC Lab from "single-run viewer" into "repeatable analysis tool".
+- Turn litopc from "single-run viewer" into "repeatable analysis tool".
 
 ## Ticket W1-01: Scenario Save/Load (Local)
 - Priority: P0
 - Owner: Frontend
 - Files:
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
   - `frontend/components/ControlPanel.tsx`
   - `frontend/lib/types.ts`
   - `frontend/lib/scenarios.ts` (new)
@@ -29,7 +29,7 @@ Scope rule:
 - Priority: P0
 - Owner: Frontend
 - Files:
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
   - `frontend/components/Viewport.tsx`
   - `frontend/lib/types.ts`
 - Description:
@@ -43,7 +43,7 @@ Scope rule:
 - Priority: P0
 - Owner: Frontend
 - Files:
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
   - `frontend/components/Viewport.tsx`
   - `frontend/components/ControlPanel.tsx`
 - Description:
@@ -63,7 +63,7 @@ Scope rule:
   - `backend/app/sim/pipeline.py`
 - Frontend files:
   - `frontend/components/ControlPanel.tsx`
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
 - Description:
   - Add `POST /simulate/batch` (new endpoint, `/simulate` unchanged).
   - Inputs: parameter name + min/max/step.
@@ -77,7 +77,7 @@ Scope rule:
 - Owner: Frontend
 - Files:
   - `frontend/components/Viewport.tsx`
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
   - `frontend/lib/export.ts` (new)
 - Description:
   - Export current visualization and metrics:
@@ -92,7 +92,7 @@ Scope rule:
 - Owner: Frontend
 - Files:
   - `frontend/components/ControlPanel.tsx`
-  - `frontend/app/opclab/page.tsx`
+  - `frontend/app/litopc/page.tsx`
   - `frontend/app/globals.css`
 - Description:
   - Clearly mark locked features:
@@ -108,7 +108,7 @@ Scope rule:
 - Owner: Frontend
 - Files:
   - `frontend/components/Viewport.tsx`
-  - `frontend/app/opclab/model-summary/page.tsx`
+  - `frontend/app/litopc/model-summary/page.tsx`
 - Description:
   - Always show:
     - model version tag
