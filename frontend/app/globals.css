@@ -1046,6 +1046,21 @@ select:focus {
   letter-spacing: 0.01em;
 }
 
+.plan-tester-guidance {
+  margin-top: -2px;
+  line-height: 1.45;
+}
+
+.plan-inline-link {
+  color: rgba(11, 83, 154, 0.92);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(11, 83, 154, 0.2);
+}
+
+.plan-inline-link:hover {
+  border-bottom-color: rgba(11, 83, 154, 0.4);
+}
+
 .plan-metrics-inline {
   border: 1px solid rgba(32, 46, 68, 0.14);
   border-radius: 11px;

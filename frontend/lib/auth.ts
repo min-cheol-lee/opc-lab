@@ -26,8 +26,10 @@ export function setAccessToken(token: string): void {
   const value = token.trim();
   if (!value) {
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+    window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
     return;
   }
+  window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
   window.localStorage.setItem(ACCESS_TOKEN_KEY, value);
 }
 
@@ -43,8 +45,10 @@ export function setDevUserId(userId: string): void {
   const value = userId.trim();
   if (!value) {
     window.localStorage.removeItem(DEV_USER_ID_KEY);
+    window.localStorage.removeItem(LEGACY_DEV_USER_ID_KEY);
     return;
   }
+  window.localStorage.removeItem(LEGACY_DEV_USER_ID_KEY);
   window.localStorage.setItem(DEV_USER_ID_KEY, value);
 }
 
@@ -60,7 +64,9 @@ export function setDevEmail(email: string): void {
   const value = email.trim();
   if (!value) {
     window.localStorage.removeItem(DEV_EMAIL_KEY);
+    window.localStorage.removeItem(LEGACY_DEV_EMAIL_KEY);
     return;
   }
+  window.localStorage.removeItem(LEGACY_DEV_EMAIL_KEY);
   window.localStorage.setItem(DEV_EMAIL_KEY, value);
 }

@@ -313,6 +313,26 @@ export function ControlPanel(props: {
   const planIdentityLabel = accountUserId ?? "Anonymous session";
   const planStatusLabel = billingStatus ?? (plan === "PRO" ? "active" : "none");
   const renewalLabel = (billingRenewalAt ?? accountProExpiresAt ?? "").replace("T", " ").slice(0, 16);
+  const internalTesterIdentity = Boolean(accountUserId?.startsWith("hdr:"));
+  const legacyTesterPro = upgradeLocked && !manageBillingVisible && internalTesterIdentity && accountSource !== "stripe";
+  const planActionLabel = manageBillingVisible
+    ? "Manage Billing"
+    : legacyTesterPro
+      ? "Legacy Pro Tester"
+      : upgradeLocked
+        ? "Pro Active"
+        : upgradeRequiresIdentity
+          ? "Sign in to upgrade"
+          : "Upgrade";
+  const planActionTitle = manageBillingVisible
+    ? "Open Stripe billing portal"
+    : legacyTesterPro
+      ? "This internal tester already has a legacy Pro entitlement. Use a fresh tester identity to exercise Stripe checkout."
+      : upgradeRequiresIdentity
+        ? "Sign in with an email identity before starting checkout."
+        : upgradeLocked
+          ? "Pro is active. Billing portal is not available for this entitlement."
+          : "Start upgrade flow";
   const promptSeenRef = useRef<Record<string, boolean>>({});
   const targetEditing = activeEditLayer === "TARGET";
   const canUseSubtractTools = !targetEditing;
@@ -510,19 +530,21 @@ export function ControlPanel(props: {
                   className="mini-btn slim plan-action-btn upgrade"
                   onClick={() => (manageBillingVisible ? requestManageBilling("account_panel") : requestUpgrade("account_panel"))}
                   disabled={upgradeLocked && !manageBillingVisible}
-                  title={
-                    manageBillingVisible
-                      ? "Open Stripe billing portal"
-                      : upgradeRequiresIdentity
-                        ? "Sign in with an email identity before starting checkout."
-                      : upgradeLocked
-                        ? "Pro is active. Billing portal is not available for this entitlement."
-                        : "Start upgrade flow"
-                  }
+                  title={planActionTitle}
                 >
-                  {manageBillingVisible ? "Manage Billing" : upgradeLocked ? "Pro Active" : upgradeRequiresIdentity ? "Sign in to upgrade" : "Upgrade"}
+                  {planActionLabel}
                 </button>
               </div>
+
+              {legacyTesterPro && (
+                <div className="plan-governance-note plan-tester-guidance">
+                  This tester already has legacy Pro access. Use a fresh tester identity from{" "}
+                  <a href="/litopc/internal-login" className="plan-inline-link">
+                    Tester
+                  </a>{" "}
+                  to run Stripe checkout.
+                </div>
+              )}
 
               {(usageError || accountError) && (
                 <div className="plan-error-stack">
