@@ -1494,6 +1494,11 @@ export default function Page() {
   const compareActive = compareEnabled && !!compareA && !!compareB && compareA.id !== compareB.id;
   const templateOptions = (plan === "FREE" ? FREE_TEMPLATES : PRO_TEMPLATES).map((id) => ({ id, label: templateLabel(id) }));
   const upgradeRequiresIdentity = Boolean(currentEntitlement?.user_id?.startsWith("cid:")) && !getDevEmail() && !getAccessToken();
+  const billingPortalAvailable = Boolean(
+    billingStatus?.stripe_customer_id &&
+    !billingStatus.stripe_customer_id.startsWith("cus_mock_") &&
+    billingStatus?.source === "stripe",
+  );
 
   const touchDistance = (a: { clientX: number; clientY: number }, b: { clientX: number; clientY: number }) => {
     const dx = a.clientX - b.clientX;
@@ -1756,7 +1761,7 @@ export default function Page() {
         accountProExpiresAt={currentEntitlement?.pro_expires_at_utc ?? null}
         billingStatus={billingStatus?.subscription_status ?? null}
         billingRenewalAt={billingStatus?.current_period_end_utc ?? null}
-        billingPortalAvailable={Boolean(billingStatus?.stripe_customer_id && billingStatus?.source === "stripe")}
+        billingPortalAvailable={billingPortalAvailable}
         upgradeRequiresIdentity={upgradeRequiresIdentity}
         accountError={accountError}
         onUpgradeIntent={(source) => { void startUpgradeCheckout(source); }}

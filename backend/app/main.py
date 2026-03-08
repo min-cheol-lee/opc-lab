@@ -587,6 +587,10 @@ def _stripe_secret_key() -> str:
     return key
 
 
+def _is_mock_billing_customer_id(customer_id: str | None) -> bool:
+    return bool(customer_id and customer_id.startswith("cus_mock_"))
+
+
 def _stripe_webhook_secret() -> str:
     secret = _env_first("STRIPE_WEBHOOK_SECRET")
     if not secret:
@@ -1152,6 +1156,11 @@ def billing_portal_session(payload: BillingPortalRequest, request: Request):
     customer = get_billing_customer_by_user(user_id)
     if customer is None:
         raise HTTPException(status_code=400, detail="No billing customer exists for this user yet.")
+    if mode == "stripe" and _is_mock_billing_customer_id(customer["stripe_customer_id"]):
+        raise HTTPException(
+            status_code=400,
+            detail="Stripe billing portal is unavailable for legacy mock entitlements. Start a fresh upgrade checkout instead.",
+        )
 
     if mode == "stub":
         url = _append_query_params(
